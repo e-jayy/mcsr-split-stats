@@ -173,12 +173,15 @@ async function renderRankDist() {
     const pct = eloPercentile(u.eloRate, data);
     const tier = TIERS.find(t => t.key === mine.tier);
     summary = `${esc(u.nickname)}: <span style="color:${tier.color}">${tierIcon(mine.tier, 14)}${mine.name}</span> · ${u.eloRate} Elo · ` +
-      `higher than ${pct >= 99.95 ? '99.9' : pct < 10 ? pct.toFixed(1) : Math.round(pct)}% of players`;
+      `higher than ${pct > 99 ? Math.min(pct, 99.9).toFixed(1) : pct < 10 ? pct.toFixed(1) : Math.round(pct)}% of players`;
   }
 
   card.innerHTML = `
     <h2 class="perf-title">${tierIcon('netherite', 32)}<span>Rank Distribution</span>${tierIcon('netherite', 32)}</h2>
     <p class="perf-overall">Season ${data.season} · ${total.toLocaleString()} ranked players sampled</p>
+    <p class="dist-caveat">Estimate: this is based on a sample of ${total.toLocaleString()}${data.highestRank > total
+      ? ` of roughly ${data.highestRank.toLocaleString()}` : ''} ranked players, not every player.
+      Players with very few games are the most likely to be missing.</p>
     <p class="dist-summary">${summary}</p>
     <div class="dist">
       <div class="dist-bars">${bars}</div>

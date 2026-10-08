@@ -55,9 +55,40 @@ while (hi - lo > 2000) {
 }
 console.log(`Season ${season}: match ids ${lo}–${latest.id}, sampling ${PAGES} pages`);
 
+// Visit pages in van der Corput order (0, 1/2, 1/4, 3/4, ...) so that a run
+// stopped early still covers the whole season evenly.
+const vdc = n => { let x = 0, b = 0.5; for (; n; n >>= 1, b /= 2) if (n & 1) x += b; return x; };
+const order = Array.from({ length: PAGES }, (_, p) => p).sort((a, b) => vdc(a) - vdc(b));
+
 const players = new Map();    // uuid -> { elo, rank }
 let matches = 0;
-for (let p = 0; p < PAGES; p++) {
+let done = 0;
+
+// Written every 50 pages and at the end, so an interrupted run still leaves usable data.
+async function save() {
+  const counts = [];
+  let highestRank = 0;
+  for (const { elo, rank } of players.values()) {
+    const i = Math.max(0, Math.floor(elo / STEP));
+    counts[i] = (counts[i] || 0) + 1;
+    if (rank > highestRank) highestRank = rank;
+  }
+  await mkdir(new URL('../data/', import.meta.url), { recursive: true });
+  await writeFile(new URL(`../data/ranks-s${season}.json`, import.meta.url), JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    season,
+    pages: done,
+    matches,
+    players: players.size,
+    // Largest leaderboard position seen: a rough count of all ranked players.
+    highestRank,
+    step: STEP,
+    counts: Array.from(counts, c => c || 0),
+  }));
+  return highestRank;
+}
+
+for (const p of order) {
   const before = Math.round(lo + ((latest.id - lo) * (p + 1)) / PAGES) + 1;
   try {
     for (const m of await list(season, before, 100)) {
@@ -69,27 +100,11 @@ for (let p = 0; p < PAGES; p++) {
   } catch (e) {
     console.warn(`  skip page ${p}: ${e.message}`);
   }
-  if ((p + 1) % 50 === 0) console.log(`  ${p + 1}/${PAGES} pages, ${players.size} ranked players`);
+  if (++done % 50 === 0) {
+    await save();
+    console.log(`  ${done}/${PAGES} pages, ${players.size} ranked players (saved)`);
+  }
 }
 
-const counts = [];
-let highestRank = 0;
-for (const { elo, rank } of players.values()) {
-  const i = Math.max(0, Math.floor(elo / STEP));
-  counts[i] = (counts[i] || 0) + 1;
-  if (rank > highestRank) highestRank = rank;
-}
-
-await mkdir(new URL('../data/', import.meta.url), { recursive: true });
-await writeFile(new URL(`../data/ranks-s${season}.json`, import.meta.url), JSON.stringify({
-  generatedAt: new Date().toISOString(),
-  season,
-  pages: PAGES,
-  matches,
-  players: players.size,
-  // Largest leaderboard position seen: a rough count of all ranked players.
-  highestRank,
-  step: STEP,
-  counts: Array.from(counts, c => c || 0),
-}));
+const highestRank = await save();
 console.log(`Wrote data/ranks-s${season}.json: ${players.size} players from ${matches} matches (highest rank seen #${highestRank})`);

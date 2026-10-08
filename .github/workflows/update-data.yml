@@ -50,24 +50,35 @@ jobs:
           key: mcsr-cache-${{ github.run_id }}
           restore-keys: mcsr-cache-
 
+      # Step limits total 300 minutes, leaving time inside the job's 355 for the cache
+      # save and commit steps even if every collection step runs to its limit.
       - name: Rank distribution
         run: node scripts/build-ranks.js 12
-        timeout-minutes: 45
+        timeout-minutes: 40
         continue-on-error: true
 
       - name: Top 150 averages
         run: node scripts/build-players.js
-        timeout-minutes: 120
+        timeout-minutes: 100
         continue-on-error: true
 
       - name: Random player sample
         run: node scripts/build-player-avgs.js
-        timeout-minutes: 120
+        timeout-minutes: 100
         continue-on-error: true
 
+      # The input is passed through an environment variable (never pasted into the
+      # script) and must be a whole number.
       - name: Grow split sample
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_target != '' }}
-        run: node scripts/build-baseline.js --target "${{ inputs.baseline_target }}"
+        env:
+          TARGET: ${{ inputs.baseline_target }}
+        run: |
+          if ! [[ "$TARGET" =~ ^[0-9]+$ ]]; then
+            echo "baseline_target must be a whole number, got: $TARGET" >&2
+            exit 1
+          fi
+          node scripts/build-baseline.js --target "$TARGET"
         timeout-minutes: 60
         continue-on-error: true
 

@@ -118,18 +118,24 @@ main { padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 18px
 
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 16px; }
-th { text-align: right; font-size: 16px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 16px; white-space: nowrap; }
+th { text-align: right; vertical-align: bottom; font-size: 16px; line-height: 1.15; color: var(--muted); padding: 6px 6px; border-bottom: 1px solid var(--line); }
+td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 16px; white-space: nowrap; }
 th:first-child, td:first-child { text-align: left; font-family: inherit; font-size: 16px; }
 tr:last-child td { border-bottom: 0; }
 td.n { color: var(--muted); }
 th button.sort {
   all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
-  color: var(--muted); white-space: nowrap;
+  color: var(--muted); text-align: inherit;
 }
 th button.sort:hover, th button.sort.on { color: var(--text); }
 th button.sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-th button.sort.has-tip { text-decoration: underline dotted; text-underline-offset: 4px; cursor: help; }
+th button.sort.has-tip { cursor: help; }
+th button.sort .nowrap { white-space: nowrap; }
+th button.sort .info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; margin-left: 2px; border: 1px solid currentColor; border-radius: 50%;
+  font: 600 9px/1 system-ui, sans-serif; vertical-align: top; transform: translateY(-3px);
+}
 th button.sort .arrow { display: inline-block; width: 10px; font-size: 10px; }
 tr.total td { border-top: 2px solid var(--line); }
 td.fast { background: var(--good-bg); color: var(--good); }
@@ -192,7 +198,13 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
   display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font-size: 16px;
 }
 .tier-legend span { color: #9a9a9a; margin-left: 4px; }
-.perf-note { text-align: center; color: #9a9a9a; font-size: 16px; margin: 12px 0 0; text-shadow: none; }
+.perf-note { text-align: center; font-size: 16px; margin: 12px 0 0; text-shadow: none; }
+.perf-note a { color: #9a9a9a; }
+.perf-note a:hover { color: #fff; }
+#how-ranks { scroll-margin-top: 24px; border-radius: 6px; }
+#how-ranks:target { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--surface-2); } to { background: transparent; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 .rank { display: inline-flex; align-items: center; }
 .perf-list { display: none; list-style: none; padding: 0; margin: 12px 0 0; gap: 6px; grid-template-columns: 1fr auto auto; column-gap: 12px; }
 .perf-list li { display: contents; }
@@ -209,4 +221,25 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
   .radar { max-width: 420px; }
   .axis { display: none; }
   .perf-list { display: grid; }
+}
+
+/* ---------- tables fit their box ---------- */
+caption.mobile-sort { display: none; }
+
+@media (max-width: 640px) {
+  /* Rows become labeled cards; a dropdown replaces the header row for sorting. */
+  .table-scroll table, .table-scroll tbody { display: block; }
+  .table-scroll thead { display: none; }
+  caption.mobile-sort { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-bottom: 6px; color: var(--muted); }
+  caption.mobile-sort label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  caption.mobile-sort select { height: 32px; padding: 0 8px; }
+  caption.mobile-sort .sort-dir { height: 32px; width: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; }
+  .table-scroll tbody tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .table-scroll tbody tr:last-child { border-bottom: 0; }
+  .table-scroll tbody td { display: flex; justify-content: space-between; gap: 8px; border: 0; padding: 2px 4px; }
+  .table-scroll tbody td:first-child { grid-column: 1 / -1; padding-bottom: 4px; }
+  .table-scroll tbody td:empty { display: none; }
+  .table-scroll tbody td[data-label]::before { content: attr(data-label); color: var(--muted); font-family: var(--pixel); text-align: left; }
+  .splits tr.ms td:first-child { padding-left: 16px; }
+  tr.total td { border-top: 0; }
 }

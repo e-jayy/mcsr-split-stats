@@ -11,7 +11,7 @@ const $ = id => document.getElementById(id);
 let baseline = null;
 const baselineReady = fetch('data/baseline.json')
   .then(r => (r.ok ? r.json() : null))
-  .then(b => { baseline = b; })
+  .then(b => { baseline = b; describeBaseline(b); })
   .catch(() => {});
 
 const state = {
@@ -24,6 +24,14 @@ const state = {
   includeResets: false,
   open: new Set(),   // expanded split rows
 };
+
+function describeBaseline(b) {
+  if (!b) return;
+  const date = new Date(b.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  $('baselineMatches').textContent = b.matches.toLocaleString();
+  $('baselineSeason').textContent = b.season ? ` of season ${b.season}` : '';
+  $('baselineDate').textContent = date;
+}
 
 // ---------- search ----------
 
@@ -144,17 +152,13 @@ function renderChips(runs) {
 function rankSplits(sum) {
   if (!baseline) return null;
   const out = {};
-  let narrowed = false, sample = 0;
   const rank = (key, i, value) => {
     const pop = population(baseline, i, { ow: state.ow, bt: state.bt });
-    narrowed ||= pop.narrowed;
-    sample = Math.max(sample, pop.values.length);
     const pct = percentile(value, pop.values);
     out[key] = pct == null ? null : { pct, tier: tierFor(pct), label: rankLabel(pct) };
   };
   SPLITS.forEach((s, i) => rank(s.key, i, val(sum.splits[s.key])));
   rank('finish', 'finish', val(sum.finish));
-  out.meta = { narrowed, sample };
   return out;
 }
 
@@ -193,7 +197,6 @@ function renderPerformance(sum, ranks) {
   }).join('');
 
   const fin = ranks.finish;
-  const scope = [state.ow && prettyType(state.ow), state.bt && prettyType(state.bt)].filter(Boolean).join(' + ');
   card.innerHTML = `
     <h2 class="perf-title">${tierIcon('diamond', 32)}<span>Split Performance</span>${tierIcon('diamond', 32)}</h2>
     ${fin ? `<p class="perf-overall">Finish <b>${fmt(val(sum.finish), { tenths: false })}</b> <span style="color:${fin.tier.color}">${tierIcon(fin.tier.key, 14)}${fin.label} · ${fin.tier.name}</span></p>` : ''}
@@ -207,11 +210,17 @@ function renderPerformance(sum, ranks) {
     <ul class="perf-list">${SPLITS.map(s => { const r = ranks[s.key]; return `<li><span>${s.name}</span><span>${fmt(val(sum.splits[s.key]), { tenths: false })}</span><span style="color:${r ? r.tier.color : '#888'}">${r ? tierIcon(r.tier.key, 16) + r.label : '—'}</span></li>`; }).join('')}</ul>
     <ul class="tier-legend">${TIERS.map((t, i) => `<li style="color:${t.color}">${tierIcon(t.key, 16)}${t.name}
       <span>${i < 4 ? `Top ${t.max}%` : `Bottom ${100 - TIERS[i - 1].max}%`}</span></li>`).join('')}</ul>
-    <p class="perf-note">Your average split vs. ${ranks.meta.sample.toLocaleString()} runs from
-      ${baseline.matches} recent ranked matches${baseline.season ? ` (season ${baseline.season})` : ''}${ranks.meta.narrowed && scope ? `, on ${scope} seeds` : ''}.</p>`;
+    <p class="perf-note"><a href="#how-ranks">How % is calculated</a></p>`;
 }
 
 // ---------- sortable tables ----------
+
+// Copy each column's header text onto its cells so phones can show rows as labeled cards.
+function labelCells(table) {
+  const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.replace(/[▲▼]/g, '').trim());
+  table.querySelectorAll('tbody tr').forEach(tr =>
+    [...tr.children].forEach((td, i) => { if (i > 0) td.dataset.label = labels[i]; }));
+}
 
 // Sort rows by a column getter; empty values always sink to the bottom.
 function sortBy(rows, get, dir) {
@@ -221,18 +230,37 @@ function sortBy(rows, get, dir) {
     .map(x => x.row);
 }
 
+// Label with a superscript info icon glued to its last word (so the icon never wraps alone).
+function withInfo(label) {
+  const i = label.lastIndexOf(' ');
+  return `${label.slice(0, i + 1)}<span class="nowrap">${label.slice(i + 1)}<span class="info" aria-hidden="true">i</span></span>`;
+}
+
 // Header cells as sort buttons. `cols` entries: { key, label, dir } (dir = first-click direction).
 function sortHeader(table, cols) {
   const { col, dir } = state.sort[table];
-  return `<thead><tr>${cols.map(c => {
+  const mobile = `<caption class="mobile-sort"><label>Sort by <select class="sort-select">${cols.map(c =>
+    `<option value="${c.key}" data-dir="${c.dir}"${c.key === col ? ' selected' : ''}>${c.label}</option>`).join('')}</select></label>` +
+    `<button type="button" class="sort-dir" aria-label="Reverse sort order">${dir === 1 ? '▲' : '▼'}</button></caption>`;
+  return mobile + `<thead><tr>${cols.map(c => {
     const on = c.key === col;
     const arrow = on ? (dir === 1 ? '▲' : '▼') : '';
     return `<th aria-sort="${on ? (dir === 1 ? 'ascending' : 'descending') : 'none'}">` +
-      `<button type="button" class="sort${on ? ' on' : ''}${c.tip ? ' has-tip' : ''}" data-sort="${c.key}" data-dir="${c.dir}"${c.tip ? ` title="${esc(c.tip)}"` : ''}>${c.label}<span class="arrow">${arrow}</span></button></th>`;
+      `<button type="button" class="sort${on ? ' on' : ''}${c.tip ? ' has-tip' : ''}" data-sort="${c.key}" data-dir="${c.dir}"${c.tip ? ` title="${esc(c.tip)}"` : ''}>${c.tip ? withInfo(c.label) : c.label}<span class="arrow">${arrow}</span></button></th>`;
   }).join('')}</tr></thead>`;
 }
 
 function bindSort(el, table, rerender) {
+  labelCells(el);
+  el.querySelector('.sort-select').addEventListener('change', e => {
+    const opt = e.target.selectedOptions[0];
+    state.sort[table] = { col: opt.value, dir: Number(opt.dataset.dir) };
+    rerender();
+  });
+  el.querySelector('.sort-dir').addEventListener('click', () => {
+    state.sort[table] = { ...state.sort[table], dir: -state.sort[table].dir };
+    rerender();
+  });
   el.querySelectorAll('button.sort').forEach(b => b.addEventListener('click', () => {
     const cur = state.sort[table];
     state.sort[table] = cur.col === b.dataset.sort
@@ -306,8 +334,8 @@ function renderPivot(table, runs, key, order, columns) {
   const cols = [
     { key: 'order', label: 'Type',  dir: 1,  get: ([t]) => (order.includes(t) ? order.indexOf(t) : order.length) },
     { key: 'runs',  label: 'Runs',  dir: -1, get: ([, s]) => s.runs },
-    { key: 'win',   label: 'Win %', dir: -1, get: ([, s]) => winRate(s) },
-    ...columns.map((c, j) => ({ key: `c${j}`, label: c.label, dir: 1, get: ([, s]) => c.get(s) })),
+    { key: 'win',   label: 'Win %', dir: -1, get: ([, s]) => winRate(s) },
+    ...columns.map((c, j) => ({ key: `c${j}`, label: c.label, tip: c.tip, dir: 1, get: ([, s]) => c.get(s) })),
   ];
   const { col, dir } = state.sort[key];
   const rows = sortBy(groups, (cols.find(c => c.key === col) || cols[0]).get, dir);
@@ -355,9 +383,8 @@ function renderBastion(runs) {
   renderPivot($('btTable'), runs, 'bt', BASTION_TYPES, [
     { label: 'Terrain to Bastion', get: s => val(s.splits.nether) },
     { label: 'Loot chest', get: ms('nether.loot_bastion') },
-    { label: 'Crying obby', get: ms('nether.obtain_crying_obsidian') },
-    { label: 'Bastion split', get: s => val(s.splits.bastion) },
-    { label: 'Fortress split', get: s => val(s.splits.fortress) },
+    { label: 'Bastion split', tip: 'Enter Bastion to Enter Fortress', get: s => val(s.splits.bastion) },
+    { label: 'Fortress split', tip: 'Fortress Enter to Blind', get: s => val(s.splits.fortress) },
     { label: 'Finish', get: s => val(s.finish) },
   ]);
 }

@@ -85,7 +85,10 @@
         A split only counts when both ends happened, so forfeits still contribute the splits they reached.
         Terrain to Bastion, Bastion and Fortress splits only count bastion-first runs; fortress-first runs are excluded from those three.
         A reset restarts the seed, so post-reset attempts are left out unless you include them.</p>
-      <p><strong>How ranks work.</strong> Your average for each split is placed among split times from a sample of recent ranked matches by all players.
+      <p id="how-ranks"><strong>How % is calculated.</strong> Each split's Top / Bottom % compares your average time for that split
+        with every time for the same split in the <strong><span id="baselineMatches">350</span> most recent ranked matches<span id="baselineSeason"> of season 12</span></strong>
+        (all players, collected <span id="baselineDate">8 October 2026</span>). "Top 10%" means your average is faster than 90% of those runs.
+        Later splits are compared against fewer runs, because many games end before reaching them.
         Netherite = top 5%, Diamond = top 20%, Emerald = top 40%, Gold = top 60%, Iron = bottom 40%, Coal = bottom 20%.
         With a seed-type filter on, you are compared against runs on the same seed type when the sample has at least 30 of them.</p>
       <p>Data from the <a href="https://docs.mcsrranked.com/" target="_blank" rel="noopener">MCSR Ranked API</a>. Match details are cached in your browser, so repeat searches are fast.

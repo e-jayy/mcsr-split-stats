@@ -9,8 +9,12 @@
 <body>
   <header class="top">
     <div class="wrap">
-      <h1>MCSR Split Stats</h1>
-      <p class="sub">Look up any MCSR Ranked player and see their average splits, broken down by overworld and bastion type.</p>
+      <div class="title-row">
+        <h1>MCSR Split Stats</h1>
+        <span class="season-badge">Season 12</span>
+      </div>
+      <p class="sub">Look up any MCSR Ranked player and see their average splits, broken down by overworld and bastion type.
+        <span class="season-note">All stats cover Season 12 matches only.</span></p>
       <form id="search" class="search" autocomplete="off">
         <label class="field grow">
           <span>Player</span>
@@ -30,10 +34,6 @@
             <option value="3">Private</option>
             <option value="">All</option>
           </select>
-        </label>
-        <label class="field narrow">
-          <span>Season</span>
-          <input id="season" type="number" min="0" placeholder="Current">
         </label>
         <button type="submit" id="go">Search</button>
       </form>
@@ -79,6 +79,8 @@
       <div class="table-scroll"><table class="pivot" id="btTable"></table></div>
     </section>
 
+    <section class="perf rankdist" id="rankDist" hidden></section>
+
     <footer class="notes">
       <p><strong>How splits are measured.</strong> Each split runs between two timeline events from the match:
         spawn → enter Nether → find bastion → find fortress → blind travel → follow eye (stronghold) → enter End → finish.
@@ -91,6 +93,12 @@
         Later splits are compared against fewer runs, because many games end before reaching them.
         Netherite = top 5%, Diamond = top 20%, Emerald = top 40%, Gold = top 60%, Iron = bottom 40%, Coal = bottom 20%.
         With a seed-type filter on, you are compared against runs on the same seed type when the sample has at least 30 of them.</p>
+      <p id="how-dist"><strong>How the rank distribution is calculated.</strong> This chart uses Elo ranks (Coal I to Netherite), which are different from the split tiers above.
+        There is no list of every ranked player, so it is built from a <strong>sample</strong>: <span id="distDetails">match pages spread evenly across the season</span>.
+        Every player in those matches who has finished placements is counted once, at their current Elo.
+        Regular players are almost all included, but some who played very few games may be missing, so the percentages are an estimate.
+        Elo ranges: Coal I 0–399, Coal II 400–499, Coal III 500–599, then 100 Elo per division up to Emerald III (1400–1499);
+        Diamond I 1500–1649, Diamond II 1650–1799, Diamond III 1800–1999, Netherite 2000+.</p>
       <p>Data from the <a href="https://docs.mcsrranked.com/" target="_blank" rel="noopener">MCSR Ranked API</a>. Match details are cached in your browser, so repeat searches are fast.
         <button type="button" class="link" id="clearCache">Clear cache</button></p>
     </footer>

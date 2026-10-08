@@ -6,6 +6,8 @@ broken down by overworld structure type and bastion type. Built on the
 
 **Live site:** https://e-jayy.github.io/mcsr-split-stats/
 
+The site covers **Season 12** only. To switch seasons, change `SEASON` in `src/app.js` and rebuild the data files for that season.
+
 ## Run it
 
 ```

@@ -4,8 +4,21 @@ import {
   runsForPlayer, summarize, groupBy, prettyType, fmt,
 } from './splits.js';
 import { TIERS, tierFor, percentile, rankLabel, population, tierIcon } from './rank.js';
+import { DIVISIONS, divisionFor, divisionCounts, eloPercentile } from './elo.js';
 
 const $ = id => document.getElementById(id);
+
+// The site only covers this season (shown in the page header).
+const SEASON = 12;
+
+// Elo histograms of ranked players per season (scripts/build-ranks.js), loaded on demand.
+const rankData = new Map();
+const loadRanks = season => {
+  if (!rankData.has(season)) {
+    rankData.set(season, fetch(`data/ranks-s${season}.json`).then(r => (r.ok ? r.json() : null)).catch(() => null));
+  }
+  return rankData.get(season);
+};
 
 // Split times from a sample of everyone's recent ranked matches (scripts/build-baseline.js).
 let baseline = null;
@@ -50,14 +63,14 @@ async function search(name) {
     const opts = {
       count: Number($('count').value),
       type: $('type').value,
-      season: $('season').value,
+      season: SEASON,
     };
     setStatus(`Loading ${user.nickname}'s matches…`);
     const matches = await loadMatches(user.uuid, opts, p => {
       if (p.waiting) setStatus(`Hit the API rate limit, waiting ${Math.round(p.waiting / 1000)}s…`);
       else setStatus(`Loading match timelines ${p.done}/${p.total}`, p.done / Math.max(1, p.total));
     });
-    if (!matches.length) throw new Error(`${user.nickname} has no matches for these settings.`);
+    if (!matches.length) throw new Error(`${user.nickname} has no Season ${SEASON} matches for these settings.`);
     await baselineReady;
     Object.assign(state, { user, matches, ow: null, bt: null, open: new Set() });
     history.replaceState(null, '', `?player=${encodeURIComponent(user.nickname)}`);
@@ -113,6 +126,66 @@ function render() {
   renderSplits(sum, ranks);
   renderOverworld(filterRuns(runs, { ow: null }));
   renderBastion(filterRuns(runs, { bt: null }));
+  renderRankDist();
+}
+
+// ---------- rank distribution ----------
+
+async function renderRankDist() {
+  const card = $('rankDist');
+  const data = await loadRanks(SEASON);
+  card.hidden = !data;
+  if (!data) return;
+
+  const counts = divisionCounts(data);
+  const total = counts.reduce((s, c) => s + c, 0);
+  const date = new Date(data.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  $('distDetails').textContent = `${data.pages} pages of ranked matches spread evenly across season ${data.season} ` +
+    `(${data.matches.toLocaleString()} matches, collected ${date}), which found ${total.toLocaleString()} ranked players` +
+    (data.highestRank ? `; the leaderboard goes down to about #${data.highestRank.toLocaleString()}` : '');
+  const peak = Math.max(...counts);
+  const u = state.user;
+  const mine = u.eloRate != null ? divisionFor(u.eloRate) : null;
+  const pctOf = c => {
+    const p = (c / total) * 100;
+    return p >= 1 ? `${Math.round(p)}%` : p > 0 ? `${p.toFixed(1)}%` : '0%';
+  };
+
+  const bars = DIVISIONS.map((d, i) => {
+    const tier = TIERS.find(t => t.key === d.tier);
+    const you = d === mine;
+    const range = d.max === Infinity ? `${d.min}+` : `${d.min}–${d.max}`;
+    return `<div class="dist-col${you ? ' you' : ''}" title="${d.name} (${range} Elo): ${counts[i].toLocaleString()} players · ${pctOf(counts[i])}">
+      ${you ? '<span class="you-tag">You</span>' : ''}
+      <span class="dist-pct">${pctOf(counts[i])}</span>
+      <div class="dist-bar" style="height:${peak ? (counts[i] / peak) * 100 : 0}%;background:${tier.color}"></div>
+    </div>`;
+  }).join('');
+
+  const numerals = DIVISIONS.map(d => `<span>${d.name.split(' ')[1] || ''}</span>`).join('');
+  const groups = TIERS.slice().reverse().map(t => {
+    const span = DIVISIONS.filter(d => d.tier === t.key).length;
+    return `<span class="dist-tier" style="grid-column:span ${span};color:${t.color}">${tierIcon(t.key, 16)}<b>${t.name}</b></span>`;
+  }).join('');
+
+  let summary = `${esc(u.nickname)} hasn't finished placement matches yet.`;
+  if (mine) {
+    const pct = eloPercentile(u.eloRate, data);
+    const tier = TIERS.find(t => t.key === mine.tier);
+    summary = `${esc(u.nickname)}: <span style="color:${tier.color}">${tierIcon(mine.tier, 14)}${mine.name}</span> · ${u.eloRate} Elo · ` +
+      `higher than ${pct >= 99.95 ? '99.9' : pct < 10 ? pct.toFixed(1) : Math.round(pct)}% of players`;
+  }
+
+  card.innerHTML = `
+    <h2 class="perf-title">${tierIcon('netherite', 32)}<span>Rank Distribution</span>${tierIcon('netherite', 32)}</h2>
+    <p class="perf-overall">Season ${data.season} · ${total.toLocaleString()} ranked players sampled</p>
+    <p class="dist-summary">${summary}</p>
+    <div class="dist">
+      <div class="dist-bars">${bars}</div>
+      <div class="dist-numerals">${numerals}</div>
+      <div class="dist-tiers">${groups}</div>
+    </div>
+    <p class="perf-note"><a href="#how-dist">How this is calculated</a></p>`;
 }
 
 function renderPlayer(sum) {
@@ -282,7 +355,7 @@ function renderSplits(sum, ranks) {
     const v = val(sum.splits[s.key]);
     if (!v) return '';
     const w = (v / total) * 100;
-    return `<div style="width:${w}%;background:var(--s-${s.key})" title="${s.name}: ${fmt(v)}">${w > 9 ? s.name.split(' ')[0] : ''}</div>`;
+    return `<div style="width:${w}%;background:var(--s-${s.key})" title="${s.name}: ${fmt(v)}"></div>`;
   }).join('');
 
   const cols = [

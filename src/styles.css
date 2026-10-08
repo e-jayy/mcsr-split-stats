@@ -5,46 +5,43 @@
   font-display: swap;
 }
 
+/* Colors from the official site (mcsrranked.com): Tailwind zinc grays + its brand greens.
+   The official site is dark-only, so this one is too. */
 :root {
-  --bg: #f5f4f0;
-  --surface: #ffffff;
-  --surface-2: #efede7;
-  --text: #1d1c1a;
-  --muted: #6b6860;
-  --line: #dedbd2;
-  --accent: #3d7a3a;
-  --accent-ink: #ffffff;
-  --good: #2f7d4a;
-  --good-bg: #e2f1e6;
-  --bad: #a3462f;
-  --bad-bg: #f7e5df;
+  color-scheme: dark;
+  --zinc-950: #09090b;
+  --zinc-900: #18181b;
+  --zinc-800: #27272a;
+  --zinc-700: #3f3f46;
+  --zinc-600: #52525b;
+  --zinc-400: #a1a1aa;
+  --zinc-200: #e4e4e7;
+  --light-green: #6ba52b;   /* --light-green: hsl(88.5 58.7% 40.8%) */
+  --dark-green: #0c2327;    /* --dark-green: hsl(188.9 52.9% 10%) */
+
+  --bg: var(--zinc-900);
+  --surface: #202023;       /* zinc-800 at 50% over zinc-900, as the official cards */
+  --surface-2: var(--zinc-800);
+  --panel: var(--zinc-950);
+  --text: var(--zinc-200);
+  --muted: var(--zinc-400);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: var(--zinc-700);
+  --accent: var(--light-green);
+  --accent-ink: var(--dark-green);
+  --good: #4ade80;          /* green-400 */
+  --good-bg: rgba(74, 222, 128, 0.12);
+  --bad: #f87171;
+  --bad-bg: rgba(239, 68, 68, 0.15);
   --s-overworld: #5f9e4e;
   --s-nether: #b9503a;
-  --s-bastion: #3f3a46;
-  --s-fortress: #7a2e2a;
+  --s-bastion: #8c8299;
+  --s-fortress: #b0544d;
   --s-blind: #c48a2c;
   --s-stronghold: #4f7b8e;
   --s-end: #8e74b8;
   --pixel: 'Minecraft', ui-monospace, Consolas, monospace;
   --mono: var(--pixel);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #141412;
-    --surface: #1d1d1a;
-    --surface-2: #262622;
-    --text: #ecebe6;
-    --muted: #9c998f;
-    --line: #34332e;
-    --accent: #77b46b;
-    --accent-ink: #10200e;
-    --good: #84cf97;
-    --good-bg: #1f3325;
-    --bad: #e99a85;
-    --bad-bg: #3a231d;
-    --s-bastion: #8c8299;
-    --s-fortress: #b0544d;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -59,15 +56,20 @@ body {
 h1 { margin: 0; font-size: 32px; font-weight: 400; }
 h2 { margin: 0; font-size: 24px; font-weight: 400; }
 b, strong { font-weight: 400; }
+.title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.season-badge {
+  background: var(--accent); color: var(--accent-ink); border-radius: 6px;
+  padding: 2px 10px; font-size: 16px; line-height: 1.5;
+}
 .sub { margin: 4px 0 20px; color: var(--muted); }
+.season-note { color: var(--text); }
 .muted { color: var(--muted); font-size: 16px; }
 a { color: var(--accent); }
 
-.top { padding: 36px 0 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.top { padding: 36px 0 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); background: var(--surface-2); }
 .search { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 16px; color: var(--muted); }
 .field.grow { flex: 1 1 220px; }
-.field.narrow input { width: 96px; }
 input, select, button { font: inherit; color: inherit; }
 input, select {
   height: 40px; padding: 0 12px; border-radius: 8px;
@@ -101,7 +103,7 @@ main { padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 18px
   border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
   padding: 4px 12px; font-size: 16px; cursor: pointer;
 }
-.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .chip small { opacity: .65; margin-left: 4px; }
 .toggles { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .check { font-size: 16px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -168,41 +170,76 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 
 /* ---------- Split Performance panel (Minecraft GUI look, always dark) ---------- */
 .perf {
-  background: #2c2c30;
-  border: 2px solid #111;
-  box-shadow: inset 2px 2px 0 #4a4a50, inset -2px -2px 0 #1c1c1f;
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 20px 16px 16px;
-  color: #f2f2f2;
-  text-shadow: 2px 2px 0 #1a1a1a;
+  color: var(--zinc-200);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
 }
 .perf-title { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 32px; line-height: 1; }
-.perf-overall { text-align: center; margin: 12px 0 0; color: #bdbdbd; }
+.perf-overall { text-align: center; margin: 12px 0 0; color: var(--muted); }
 .perf-overall b { color: #fff; }
 .px-icon { display: inline-block; vertical-align: -3px; margin-right: 6px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.45)); }
 .perf-title .px-icon { margin: 0; vertical-align: middle; }
 .radar { position: relative; max-width: 720px; margin: 8px auto 0; aspect-ratio: 160 / 100; }
 .radar > svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.radar .ring { fill: none; stroke: #4b3f5c; stroke-width: .5; }
-.radar .ring.outer { fill: #3a2f47; stroke: #fff; stroke-width: .8; }
-.radar .spoke { stroke: #4b3f5c; stroke-width: .4; }
-.radar .shape { fill: rgba(170, 150, 210, .45); stroke: #c9b9ec; stroke-width: .5; stroke-linejoin: round; }
+.radar .ring { fill: none; stroke: var(--zinc-700); stroke-width: .5; }
+.radar .ring.outer { fill: var(--zinc-800); stroke: var(--zinc-400); stroke-width: .8; }
+.radar .spoke { stroke: var(--zinc-700); stroke-width: .4; }
+.radar .shape { fill: rgba(107, 165, 43, .45); stroke: #9bd35a; stroke-width: .5; stroke-linejoin: round; }
 .axis { position: absolute; white-space: nowrap; line-height: 1.25; }
 .axis.left  { transform: translate(-100%, -50%); text-align: right; }
 .axis.right { transform: translate(0, -50%); }
 .axis.mid   { transform: translate(-50%, -85%); text-align: center; }
-.axis-name { font-size: 24px; color: #fafafa; }
+.axis-name { font-size: 24px; color: var(--zinc-200); }
 .axis-val { font-size: 16px; }
 .tier-legend {
   list-style: none; padding: 0; margin: 18px 0 0;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font-size: 16px;
 }
-.tier-legend span { color: #9a9a9a; margin-left: 4px; }
+.tier-legend span { color: var(--muted); margin-left: 4px; }
 .perf-note { text-align: center; font-size: 16px; margin: 12px 0 0; text-shadow: none; }
-.perf-note a { color: #9a9a9a; }
-.perf-note a:hover { color: #fff; }
-#how-ranks { scroll-margin-top: 24px; border-radius: 6px; }
-#how-ranks:target { animation: flash 1.6s ease-out; }
+.perf-note a { color: var(--muted); }
+.perf-note a:hover { color: var(--zinc-200); }
+#how-ranks, #how-dist { scroll-margin-top: 24px; border-radius: 6px; }
+#how-ranks:target, #how-dist:target { animation: flash 1.6s ease-out; }
+
+/* ---------- rank distribution chart ---------- */
+.dist-summary { text-align: center; margin: 6px 0 0; color: var(--zinc-200); }
+.dist-summary .px-icon { vertical-align: -2px; }
+.dist { max-width: 820px; margin: 18px auto 0; }
+.dist-bars, .dist-numerals, .dist-tiers { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); column-gap: 6px; }
+.dist-bars { height: 220px; align-items: end; padding-top: 44px; border-bottom: 2px solid var(--zinc-700); }
+.dist-col { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.dist-bar {
+  width: 100%; min-height: 2px;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.35), inset 0 -3px 0 rgba(0,0,0,.3);
+  border: 2px solid var(--panel); border-bottom: 0;
+}
+.dist-pct { font-size: 16px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; }
+.dist-col.you .dist-bar { outline: 2px solid var(--light-green); outline-offset: 2px; }
+.dist-col.you .dist-pct { color: var(--zinc-200); }
+.you-tag {
+  position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+  background: var(--light-green); color: var(--dark-green); text-shadow: none; padding: 0 6px; border-radius: 3px; font-size: 16px;
+}
+.you-tag::after {
+  content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--light-green); border-bottom: 0;
+}
+.dist-numerals { margin-top: 6px; text-align: center; color: var(--muted); font-size: 16px; }
+.dist-tiers { margin-top: 6px; }
+.dist-tier { display: flex; justify-content: center; align-items: center; gap: 2px; font-size: 16px; border-top: 2px solid currentColor; padding-top: 6px; white-space: nowrap; }
+.dist-tier b { font-weight: 400; }
+@media (max-width: 760px) {
+  .dist-bars, .dist-numerals, .dist-tiers { column-gap: 3px; }
+  .dist-pct, .dist-numerals { display: none; }
+  .dist-bars { height: 180px; padding-top: 32px; }
+  .dist-tier b { display: none; }
+  .dist-tier .px-icon { margin: 0; }
+  .you-tag { top: -30px; }
+}
 @keyframes flash { from { background: var(--surface-2); } to { background: transparent; } }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 .rank { display: inline-flex; align-items: center; }
@@ -210,10 +247,6 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .perf-list li { display: contents; }
 .perf-list li > span:nth-child(2) { text-align: right; color: #fff; }
 .rank .px-icon { vertical-align: 0; }
-@media (prefers-color-scheme: light) {
-  /* tier colors are tuned for the dark panel; give table ranks a dark chip in light mode */
-  :root:not([data-theme=dark]) .rank { background: #2c2c30; padding: 1px 8px 1px 6px; border-radius: 3px; }
-}
 @media (max-width: 640px) {
   .perf { padding: 16px 8px 12px; }
   .perf-title { font-size: 24px; gap: 6px; white-space: nowrap; }

@@ -403,7 +403,15 @@ function renderSplits(sum, ranks) {
   }));
 }
 
+// Percentile of the player's average for split i on one seed type, vs. other players' runs on that type.
+function typeRank(i, value, seed) {
+  if (!baseline || value == null) return null;
+  return percentile(value, population(baseline, i, seed).values);
+}
+const pctBadge = pct => rankHtml(pct == null ? null : { pct, tier: tierFor(pct), label: rankLabel(pct) });
+
 // Pivot table: one row per seed type; every column is sortable.
+// Column getters receive (summary, seedType); columns with render() draw their own cell.
 function renderPivot(table, runs, key, order, columns) {
   const groups = groupBy(runs, key, order);
   const winRate = s => (s.matches ? s.wins / s.matches : null);
@@ -411,14 +419,15 @@ function renderPivot(table, runs, key, order, columns) {
     { key: 'order', label: 'Type',  dir: 1,  get: ([t]) => (order.includes(t) ? order.indexOf(t) : order.length) },
     { key: 'runs',  label: 'Runs',  dir: -1, get: ([, s]) => s.runs },
     { key: 'win',   label: 'Win %', dir: -1, get: ([, s]) => winRate(s) },
-    ...columns.map((c, j) => ({ key: `c${j}`, label: c.label, tip: c.tip, dir: 1, get: ([, s]) => c.get(s) })),
+    ...columns.map((c, j) => ({ key: c.key || `c${j}`, label: c.label, tip: c.tip, dir: 1, get: ([t, s]) => c.get(s, t) })),
   ];
   const { col, dir } = state.sort[key];
   const rows = sortBy(groups, (cols.find(c => c.key === col) || cols[0]).get, dir);
 
   // Fastest / slowest per time column (types with at least 3 runs).
   const extremes = columns.map(c => {
-    const vs = groups.filter(([, s]) => s.runs >= 3).map(([, s]) => c.get(s)).filter(v => v != null);
+    if (c.render) return null;
+    const vs = groups.filter(([, s]) => s.runs >= 3).map(([t, s]) => c.get(s, t)).filter(v => v != null);
     return vs.length >= 2 ? [Math.min(...vs), Math.max(...vs)] : null;
   });
 
@@ -428,7 +437,8 @@ function renderPivot(table, runs, key, order, columns) {
     html += `<tr data-type="${esc(type)}" class="${state[key] === type ? 'active' : ''}">
       <td>${prettyType(type)}</td><td class="n">${s.runs}</td><td>${wr == null ? '—' : Math.round(wr * 100) + '%'}</td>`;
     columns.forEach((c, j) => {
-      const v = c.get(s);
+      const v = c.get(s, type);
+      if (c.render) { html += `<td>${c.render(v)}</td>`; return; }
       const ex = extremes[j];
       const cls = ex && s.runs >= 3 && v != null ? (v === ex[0] ? 'fast' : v === ex[1] ? 'slow' : '') : '';
       html += `<td class="${cls}">${fmt(v)}</td>`;
@@ -449,6 +459,9 @@ function renderOverworld(runs) {
     { label: 'Obtain iron', get: ms('story.smelt_iron') },
     { label: 'Iron pick', get: ms('story.iron_tools') },
     { label: 'Enter Nether', get: s => val(s.splits.overworld) },
+    { key: 'netherRank', label: 'Rank', render: pctBadge,
+      tip: "Your average Enter Nether time vs. all players' runs on this overworld type",
+      get: (s, t) => typeRank(0, val(s.splits.overworld), { ow: t, bt: state.bt }) },
     { label: 'Terrain to Bastion', get: s => val(s.splits.nether) },
     { label: 'Finish', get: s => val(s.finish) },
   ]);
@@ -460,6 +473,9 @@ function renderBastion(runs) {
     { label: 'Terrain to Bastion', get: s => val(s.splits.nether) },
     { label: 'Loot chest', get: ms('nether.loot_bastion') },
     { label: 'Bastion split', tip: 'Enter Bastion to Enter Fortress', get: s => val(s.splits.bastion) },
+    { key: 'bastionRank', label: 'Rank', render: pctBadge,
+      tip: "Your average Bastion split vs. all players' runs on this bastion type",
+      get: (s, t) => typeRank(2, val(s.splits.bastion), { ow: state.ow, bt: t }) },
     { label: 'Fortress split', tip: 'Fortress Enter to Blind', get: s => val(s.splits.fortress) },
     { label: 'Finish', get: s => val(s.finish) },
   ]);

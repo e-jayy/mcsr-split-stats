@@ -7,39 +7,13 @@
 // Throttled to stay under the API limit (500 requests / 10 minutes):
 // 600 pages take about 15 minutes.
 
-import { writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { get } from './lib/http.js';
 
-const BASE = 'https://api.mcsrranked.com';
-const GAP_MS = 1300;
 const STEP = 10;              // histogram bucket width in Elo
 const args = process.argv.slice(2);
 const PAGES = args.includes('--pages') ? Number(args[args.indexOf('--pages') + 1]) : 600;
 const seasonArg = args.find((a, i) => /^\d+$/.test(a) && args[i - 1] !== '--pages');
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function get(path) {
-  for (let attempt = 0; ; attempt++) {
-    let res;
-    try {
-      res = await fetch(BASE + path);
-    } catch (e) {
-      if (attempt > 5) throw e;
-      await sleep(10000);
-      continue;
-    }
-    if (res.status === 429) {
-      const wait = (Number(res.headers.get('Retry-After')) || 60) * 1000;
-      console.log(`  rate limited, waiting ${Math.round(wait / 1000)}s`);
-      await sleep(wait);
-      continue;
-    }
-    const body = await res.json().catch(() => null);
-    await sleep(GAP_MS);
-    if (body?.status !== 'success') throw new Error(`${path}: ${JSON.stringify(body?.data)}`);
-    return body.data;
-  }
-}
 
 const list = (season, before, count) =>
   get(`/matches?type=2&count=${count}${season ? `&season=${season}` : ''}${before ? `&before=${before}` : ''}`);
@@ -64,7 +38,12 @@ const players = new Map();    // uuid -> { elo, rank }
 let matches = 0;
 let done = 0;
 
-// Written every 50 pages and at the end, so an interrupted run still leaves usable data.
+// Pages in the currently published file: progress saves only replace it once this run has
+// covered more pages, so a refresh that's cut short keeps the previous full sample.
+let existingPages = 0;
+try { existingPages = JSON.parse(await readFile(new URL(`../data/ranks-s${season}.json`, import.meta.url), 'utf8')).pages; } catch {}
+
+// Written every 50 pages (once past the published file) and at the end.
 async function save() {
   const counts = [];
   let highestRank = 0;
@@ -100,7 +79,7 @@ for (const p of order) {
   } catch (e) {
     console.warn(`  skip page ${p}: ${e.message}`);
   }
-  if (++done % 50 === 0) {
+  if (++done % 50 === 0 && done > existingPages) {
     await save();
     console.log(`  ${done}/${PAGES} pages, ${players.size} ranked players (saved)`);
   }

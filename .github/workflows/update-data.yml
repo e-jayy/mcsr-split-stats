@@ -1,0 +1,93 @@
+# Refreshes the site's data files on GitHub's servers and commits them (which redeploys
+# GitHub Pages). The MCSR Ranked API key, if any, is only ever used here, read from the
+# encrypted repository secret MCSR_API_KEY; it never reaches the website or a browser.
+#
+# Settings (repo -> Settings -> Secrets and variables -> Actions):
+#   secret   MCSR_API_KEY         API key with an expanded rate limit (optional)
+#   variable MCSR_API_KEY_HEADER  header the key is sent in (optional, default Private-Key)
+#   variable MCSR_GAP_MS          ms between requests (optional, default 1300 = public limit)
+
+name: Update data
+
+on:
+  schedule:
+    - cron: '17 4 * * *'          # every day at 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      baseline_target:
+        description: 'Grow the split sample to this many matches (leave blank to skip)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      MCSR_API_KEY: ${{ secrets.MCSR_API_KEY }}
+      MCSR_API_KEY_HEADER: ${{ vars.MCSR_API_KEY_HEADER }}
+      MCSR_GAP_MS: ${{ vars.MCSR_GAP_MS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Downloaded matches and sampling progress, kept between runs so each run only
+      # fetches what's new.
+      - name: Restore match cache
+        uses: actions/cache/restore@v4
+        with:
+          path: scripts/.cache
+          key: mcsr-cache-${{ github.run_id }}
+          restore-keys: mcsr-cache-
+
+      - name: Rank distribution
+        run: node scripts/build-ranks.js 12
+        timeout-minutes: 45
+        continue-on-error: true
+
+      - name: Top 150 averages
+        run: node scripts/build-players.js
+        timeout-minutes: 120
+        continue-on-error: true
+
+      - name: Random player sample
+        run: node scripts/build-player-avgs.js
+        timeout-minutes: 120
+        continue-on-error: true
+
+      - name: Grow split sample
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_target != '' }}
+        run: node scripts/build-baseline.js --target "${{ inputs.baseline_target }}"
+        timeout-minutes: 60
+        continue-on-error: true
+
+      - name: Save match cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: scripts/.cache
+          key: mcsr-cache-${{ github.run_id }}
+
+      - name: Commit updated data
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/*.json
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Update data ($(date -u +%Y-%m-%d))"
+            git pull --rebase
+            git push
+          fi

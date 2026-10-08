@@ -10,9 +10,8 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { trimMatch, runsForPlayer, SPLITS } from '../src/splits.js';
+import { get } from './lib/http.js';
 
-const BASE = 'https://api.mcsrranked.com';
-const GAP_MS = 1300;
 const PER_POINT = 40;         // consecutive matches taken at each random point in the season
 const SAVE_EVERY = 100;
 const args = process.argv.slice(2);
@@ -20,31 +19,6 @@ const opt = (name, def) => (args.includes(name) ? Number(args[args.indexOf(name)
 const SEASON = opt('--season', 12);
 const TARGET = opt('--target', 5000);
 const file = new URL('../data/baseline.json', import.meta.url);
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function get(path) {
-  for (let attempt = 0; ; attempt++) {
-    let res;
-    try {
-      res = await fetch(BASE + path);
-    } catch (e) {
-      if (attempt > 5) throw e;
-      await sleep(10000);
-      continue;
-    }
-    if (res.status === 429) {
-      const wait = (Number(res.headers.get('Retry-After')) || 60) * 1000;
-      console.log(`  rate limited, waiting ${Math.round(wait / 1000)}s`);
-      await sleep(wait);
-      continue;
-    }
-    const body = await res.json().catch(() => null);
-    await sleep(GAP_MS);
-    if (body?.status !== 'success') throw new Error(`${path}: ${JSON.stringify(body?.data)}`);
-    return body.data;
-  }
-}
 
 const list = (before, count) =>
   get(`/matches?type=2&season=${SEASON}&count=${count}${before ? `&before=${before}` : ''}`);

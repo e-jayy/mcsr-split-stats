@@ -4,6 +4,8 @@ Search an MCSR Ranked player and see the average of each split of their runs,
 broken down by overworld structure type and bastion type. Built on the
 [MCSR Ranked API](https://docs.mcsrranked.com/). No dependencies, no build step.
 
+**Live site:** https://e-jayy.github.io/mcsr-split-stats/
+
 ## Run it
 
 ```

@@ -96,7 +96,7 @@ main { padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 18px
 
 .filters { display: flex; flex-direction: column; gap: 10px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.chips .label { font-size: 16px; color: var(--muted); width: 72px; }
+.chips .label { font-size: 16px; color: var(--muted); width: 112px; flex: none; }
 .chip {
   border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
   padding: 4px 12px; font-size: 16px; cursor: pointer;

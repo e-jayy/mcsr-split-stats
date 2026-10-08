@@ -1,7 +1,7 @@
-import { getUser, loadMatches, clearCache } from './api.js';
+import { getUser, loadMatches, clearCache, getLeaderboard } from './api.js';
 import {
   SPLITS, MILESTONE_NAMES, OVERWORLD_TYPES, BASTION_TYPES,
-  runsForPlayer, summarize, groupBy, prettyType, fmt,
+  runsForPlayer, summarize, groupBy, prettyType, fmt, winRate,
 } from './splits.js';
 import { TIERS, tierFor, percentile, rankLabel, population, tierIcon } from './rank.js';
 import { DIVISIONS, divisionFor, divisionCounts, eloPercentile } from './elo.js';
@@ -20,7 +20,7 @@ const loadRanks = season => {
   return rankData.get(season);
 };
 
-// Split times from a sample of everyone's recent ranked matches (scripts/build-baseline.js).
+// Split times from a sample of everyone's ranked matches this season (scripts/build-baseline.js).
 let baseline = null;
 const baselineReady = fetch('data/baseline.json')
   .then(r => (r.ok ? r.json() : null))
@@ -35,14 +35,17 @@ const state = {
   // Column sort per table: { col, dir } where dir 1 = ascending, -1 = descending.
   sort: { splits: { col: 'order', dir: 1 }, ow: { col: 'order', dir: 1 }, bt: { col: 'order', dir: 1 } },
   includeResets: false,
+  compare: 'type',   // Split Performance with a filter on: rank vs. same seed type ('type') or all runs ('all')
   open: new Set(),   // expanded split rows
 };
 
 function describeBaseline(b) {
   if (!b) return;
   const date = new Date(b.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
-  $('baselineMatches').textContent = b.matches.toLocaleString();
-  $('baselineSeason').textContent = b.season ? ` of season ${b.season}` : '';
+  // Newer samples (with match ids) are spread across the season; the original was the most recent matches.
+  $('baselineSample').textContent = b.ids
+    ? `${b.matches.toLocaleString()} ranked matches sampled across season ${b.season}`
+    : `${b.matches.toLocaleString()} most recent ranked matches of season ${b.season}`;
   $('baselineDate').textContent = date;
 }
 
@@ -53,26 +56,44 @@ $('search').addEventListener('submit', e => {
   search($('name').value);
 });
 
+// Matches box: a whole number, or "All" (every Season 12 match). null if invalid.
+function parseCount(text) {
+  const t = text.trim().toLowerCase();
+  if (t === 'all') return Infinity;
+  return /^\d+$/.test(t) && Number(t) > 0 ? Number(t) : null;
+}
+
 async function search(name) {
   if (!name.trim()) return;
+  const count = parseCount($('count').value);
+  if (count == null) {
+    setStatus('Matches must be a whole number (like 75) or "All".', null, true);
+    return;
+  }
   const go = $('go');
   go.disabled = true;
   setStatus('Looking up player…');
   try {
     const user = await getUser(name);
     const opts = {
-      count: Number($('count').value),
+      count,
       type: $('type').value,
       season: SEASON,
     };
-    setStatus(`Loading ${user.nickname}'s matches…`);
+    setStatus(count === Infinity
+      ? `Finding all of ${user.nickname}'s Season ${SEASON} matches…`
+      : `Loading ${user.nickname}'s matches…`);
     const matches = await loadMatches(user.uuid, opts, p => {
       if (p.waiting) setStatus(`Hit the API rate limit, waiting ${Math.round(p.waiting / 1000)}s…`);
-      else setStatus(`Loading match timelines ${p.done}/${p.total}`, p.done / Math.max(1, p.total));
+      else setStatus(`Loading match timelines ${p.done}/${p.total}` +
+        (count === Infinity && p.total > 200 ? ' (loading every match can take a few minutes)' : ''),
+        p.done / Math.max(1, p.total));
     });
     if (!matches.length) throw new Error(`${user.nickname} has no Season ${SEASON} matches for these settings.`);
     await baselineReady;
-    Object.assign(state, { user, matches, ow: null, bt: null, open: new Set() });
+    // Remember the mode used for this search (the dropdown can change before the next search).
+    const modeLabel = $('type').selectedOptions[0].textContent;
+    Object.assign(state, { user, matches, modeLabel, ow: null, bt: null, open: new Set() });
     history.replaceState(null, '', `?player=${encodeURIComponent(user.nickname)}`);
     setStatus(null);
     render();
@@ -118,7 +139,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 function render() {
   $('results').hidden = false;
   const runs = allRuns();
-  renderPlayer(summarize(runs));
+  const all = summarize(runs);
+  renderStickyBar(all);
+  renderPlayer(all);
   renderChips(runs);
   const sum = summarize(filterRuns(runs));
   const ranks = rankSplits(sum);
@@ -126,6 +149,7 @@ function render() {
   renderSplits(sum, ranks);
   renderOverworld(filterRuns(runs, { ow: null }));
   renderBastion(filterRuns(runs, { bt: null }));
+  renderFilters();
   renderRankDist();
 }
 
@@ -193,13 +217,14 @@ async function renderRankDist() {
 
 function renderPlayer(sum) {
   const u = state.user;
-  const pct = sum.matches ? Math.round((sum.wins / sum.matches) * 100) : 0;
+  const wr = winRate(sum);
+  const pct = wr == null ? '—' : `${Math.round(wr * 100)}%`;
   $('player').innerHTML = `
     <div class="name"><img src="https://mc-heads.net/avatar/${u.uuid}/36" alt="">${esc(u.nickname)}</div>
     <div class="kpis">
       <div class="kpi"><b>${u.eloRate ?? '—'}</b><span>Elo${u.eloRank ? ` · #${u.eloRank}` : ''}</span></div>
       <div class="kpi"><b>${sum.matches}</b><span>Matches analyzed</span></div>
-      <div class="kpi"><b>${pct}%</b><span>Win rate</span></div>
+      <div class="kpi" title="${sum.wins}W ${sum.losses}L${sum.draws ? `, ${sum.draws} draw${sum.draws > 1 ? 's' : ''} not counted` : ''}"><b>${pct}</b><span>Win rate</span></div>
       <div class="kpi"><b>${fmt(sum.finish.mean)}</b><span>Avg finish (${sum.completions})</span></div>
       <div class="kpi"><b>${fmt(sum.finish.best)}</b><span>Best finish</span></div>
     </div>`;
@@ -224,19 +249,75 @@ function renderChips(runs) {
   make($('btChips'), 'Bastion', 'bt', BASTION_TYPES);
 }
 
+// Which seed type matters most for each split, used when the sample has too few runs
+// matching both selected types.
+const SPLIT_SEED = { overworld: 'ow', nether: 'bt', bastion: 'bt', fortress: 'bt' };
+
 // Percentile + tier for every split (and finish) against the baseline.
+// With a seed-type filter on, state.compare picks the comparison: runs on the same
+// seed type ('type') or every run ('all'). Same-type comparisons fall back from both
+// types -> the split's most relevant type -> all runs when the sample is too small;
+// `scopes` records what each split was actually compared against.
 function rankSplits(sum) {
   if (!baseline) return null;
-  const out = {};
-  const rank = (key, i, value) => {
-    const pop = population(baseline, i, { ow: state.ow, bt: state.bt });
+  const out = { scopes: [] };
+  const filtering = (state.ow || state.bt) && state.compare === 'type';
+  const rank = (key, name, i, value) => {
+    let pop = population(baseline, i, {}), used = 'all';
+    if (filtering) {
+      const tries = [{ ow: state.ow, bt: state.bt }];
+      const own = SPLIT_SEED[key];
+      if (state.ow && state.bt && own) tries.push({ [own]: state[own] });
+      for (const seed of tries) {
+        const p = population(baseline, i, seed);
+        if (p.narrowed) { pop = p; used = seed; break; }
+      }
+    }
     const pct = percentile(value, pop.values);
     out[key] = pct == null ? null : { pct, tier: tierFor(pct), label: rankLabel(pct) };
+    if (filtering && value != null) out.scopes.push({ name, used });
   };
-  SPLITS.forEach((s, i) => rank(s.key, i, val(sum.splits[s.key])));
-  rank('finish', 'finish', val(sum.finish));
+  SPLITS.forEach((s, i) => rank(s.key, s.name, i, val(sum.splits[s.key])));
+  rank('finish', 'Finish', 'finish', val(sum.finish));
   return out;
 }
+
+const scopeName = seed => (seed === 'all' ? 'all runs'
+  : `${[seed.ow && prettyType(seed.ow), seed.bt && prettyType(seed.bt)].filter(Boolean).join(' + ')} runs`);
+
+// Compare-to switch for Split Performance; only shown while a seed-type filter is on.
+function compareSwitch(ranks) {
+  if (!state.ow && !state.bt) return '';
+  const scope = [state.ow && prettyType(state.ow), state.bt && prettyType(state.bt)].filter(Boolean).join(' + ');
+  const opt = (value, label) =>
+    `<button type="button" data-compare="${value}" aria-pressed="${state.compare === value}"${state.compare === value ? ' class="on"' : ''}>${label}</button>`;
+  let note = 'Ranked against all runs, on every seed type.';
+  if (state.compare === 'type') {
+    // Group splits by what they were compared against, e.g. "Overworld vs. Shipwreck runs".
+    const groups = new Map();
+    for (const { name, used } of ranks.scopes) {
+      const label = scopeName(used);
+      groups.set(label, [...(groups.get(label) || []), name]);
+    }
+    const wanted = `${scope} runs`;
+    note = [...groups.keys()].every(k => k === wanted)
+      ? `Ranked against other players' ${wanted} only.`
+      : `Not enough ${wanted} in the sample for every split, so: ` +
+        [...groups].map(([label, names]) => `${names.join(', ')} vs. ${label}`).join('; ') + '.';
+  }
+  return `<div class="compare">
+      <span class="compare-label">Compare to</span>
+      <div class="seg" role="group" aria-label="Compare to">${opt('type', `${scope} runs`)}${opt('all', 'All runs')}</div>
+    </div>
+    <p class="compare-note">${note}</p>`;
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-compare]');
+  if (!btn || state.compare === btn.dataset.compare) return;
+  state.compare = btn.dataset.compare;
+  render();
+});
 
 const rankHtml = r => (r
   ? `<span class="rank" style="color:${r.tier.color}">${tierIcon(r.tier.key)}${r.label}</span>`
@@ -275,6 +356,8 @@ function renderPerformance(sum, ranks) {
   const fin = ranks.finish;
   card.innerHTML = `
     <h2 class="perf-title">${tierIcon('diamond', 32)}<span>Split Performance</span>${tierIcon('diamond', 32)}</h2>
+    <div class="filter-line center" data-filters></div>
+    ${compareSwitch(ranks)}
     ${fin ? `<p class="perf-overall">Finish <b>${fmt(val(sum.finish), { tenths: false })}</b> <span style="color:${fin.tier.color}">${tierIcon(fin.tier.key, 14)}${fin.label} · ${fin.tier.name}</span></p>` : ''}
     <div class="radar">
       <svg viewBox="0 0 ${W} ${H}" aria-hidden="true">
@@ -346,11 +429,45 @@ function bindSort(el, table, rerender) {
   }));
 }
 
+// ---------- active seed-type filters ----------
+
+// Tags for the selected overworld / bastion types, each with a button to clear it.
+// `compact` drops the explanatory text (used in the sticky top bar).
+function filterTags(compact = false) {
+  const tags = [['ow', 'Overworld'], ['bt', 'Bastion']]
+    .filter(([key]) => state[key])
+    .map(([key, label]) => `<button type="button" class="ftag" data-clear="${key}" title="Clear this filter">` +
+      `<span class="ftag-kind">${label}: </span><b>${prettyType(state[key])}</b><span aria-hidden="true">×</span></button>`);
+  if (compact) return tags.length ? tags.join('') : '<span class="ftag-label">All seed types</span>';
+  return tags.length
+    ? `<span class="ftag-label">Filtered by</span>${tags.join('')}`
+    : '<span class="ftag-label">Showing all seed types · click a type row to filter</span>';
+}
+
+function renderFilters() {
+  document.querySelectorAll('[data-filters]').forEach(el => { el.innerHTML = filterTags(); });
+  $('sbFilters').innerHTML = filterTags(true);
+}
+
+// Sticky top bar: player, active filters, matches analyzed and mode.
+function renderStickyBar(all) {
+  const u = state.user;
+  $('stickyBar').hidden = false;
+  $('sbPlayer').innerHTML = `<img src="https://mc-heads.net/avatar/${u.uuid}/24" alt="">${esc(u.nickname)}`;
+  $('sbMeta').innerHTML =
+    `<span><b>${all.matches}</b> matches<span class="sb-long"> analyzed</span></span><span class="sb-mode">${esc(state.modeLabel)}</span>`;
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-clear]');
+  if (!btn) return;
+  state[btn.dataset.clear] = null;
+  render();
+});
+
 function renderSplits(sum, ranks) {
-  const parts = [state.ow && prettyType(state.ow), state.bt && prettyType(state.bt)].filter(Boolean);
   $('splitsNote').textContent =
-    `${sum.runs} runs${parts.length ? ` on ${parts.join(' + ')}` : ''}` +
-    (sum.fortressFirst ? ` · ${sum.fortressFirst} fortress-first` : '');
+    `${sum.runs} runs` + (sum.fortressFirst ? ` · ${sum.fortressFirst} fortress-first` : '');
 
   // Stacked bar of average time per split.
   const total = SPLITS.reduce((t, s) => t + (val(sum.splits[s.key]) || 0), 0);
@@ -414,7 +531,6 @@ const pctBadge = pct => rankHtml(pct == null ? null : { pct, tier: tierFor(pct),
 // Column getters receive (summary, seedType); columns with render() draw their own cell.
 function renderPivot(table, runs, key, order, columns) {
   const groups = groupBy(runs, key, order);
-  const winRate = s => (s.matches ? s.wins / s.matches : null);
   const cols = [
     { key: 'order', label: 'Type',  dir: 1,  get: ([t]) => (order.includes(t) ? order.indexOf(t) : order.length) },
     { key: 'runs',  label: 'Runs',  dir: -1, get: ([, s]) => s.runs },
@@ -480,6 +596,155 @@ function renderBastion(runs) {
     { label: 'Finish', get: s => val(s.finish) },
   ]);
 }
+
+// ---------- top-150 drop-down on the Player box ----------
+
+const lb = { users: null, shown: [], active: -1, open: false };
+const nameInput = $('name');
+
+function lbRow(u, i) {
+  const d = divisionFor(u.eloRate);
+  const tier = d && TIERS.find(t => t.key === d.tier);
+  return `<li role="option" id="lb-${i}" data-name="${esc(u.nickname)}" aria-selected="false">
+    <span class="lb-rank">${u.eloRank}</span>
+    <span class="lb-name"><img src="https://mc-heads.net/avatar/${u.uuid}/20" alt="" loading="lazy">${esc(u.nickname)}</span>
+    <span class="lb-elo"${tier ? ` style="color:${tier.color}" title="${d.name}"` : ''}>${d ? tierIcon(d.tier, 14) : ''}${u.eloRate}</span>
+  </li>`;
+}
+
+function lbRender() {
+  const list = $('lbList');
+  if (!lb.users) {
+    list.innerHTML = `<li class="lb-msg">${lb.error ? 'Couldn’t load the leaderboard. You can still type a name and press Search.' : 'Loading the top 150…'}</li>`;
+    return;
+  }
+  const q = nameInput.value.trim().toLowerCase();
+  lb.shown = q ? lb.users.filter(u => u.nickname.toLowerCase().includes(q)) : lb.users;
+  lb.active = Math.min(lb.active, lb.shown.length - 1);
+  list.innerHTML = lb.shown.length
+    ? lb.shown.map(lbRow).join('')
+    : `<li class="lb-msg">No top-150 player matches “${esc(nameInput.value.trim())}”. Press Search to look them up anyway.</li>`;
+  lbHighlight();
+}
+
+function lbHighlight() {
+  $('lbList').querySelectorAll('[role=option]').forEach((li, i) => {
+    li.setAttribute('aria-selected', String(i === lb.active));
+    if (i === lb.active) li.scrollIntoView({ block: 'nearest' });
+  });
+  if (lb.active >= 0) nameInput.setAttribute('aria-activedescendant', `lb-${lb.active}`);
+  else nameInput.removeAttribute('aria-activedescendant');
+}
+
+async function lbOpen() {
+  if (lb.open) return;
+  lb.open = true;
+  lb.active = -1;
+  $('lbPop').hidden = false;
+  nameInput.setAttribute('aria-expanded', 'true');
+  lbRender();
+  if (!lb.users) {
+    try { lb.users = await getLeaderboard(SEASON); lb.error = false; } catch { lb.error = true; }
+    if (lb.open) lbRender();
+  }
+}
+
+function lbClose() {
+  lb.open = false;
+  $('lbPop').hidden = true;
+  nameInput.setAttribute('aria-expanded', 'false');
+  nameInput.removeAttribute('aria-activedescendant');
+}
+
+function lbPick(name) {
+  nameInput.value = name;
+  lbClose();
+  search(name);
+}
+
+nameInput.addEventListener('focus', lbOpen);
+nameInput.addEventListener('click', lbOpen);
+nameInput.addEventListener('input', () => { lb.active = -1; lbOpen(); lbRender(); });
+nameInput.addEventListener('blur', () => setTimeout(lbClose, 120));
+nameInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!lb.open) lbOpen();
+    if (!lb.shown.length) return;
+    const n = lb.shown.length;
+    lb.active = e.key === 'ArrowDown' ? (lb.active + 1) % n : lb.active < 0 ? n - 1 : (lb.active - 1 + n) % n;
+    lbHighlight();
+  } else if (e.key === 'Enter' && lb.open && lb.active >= 0) {
+    e.preventDefault();
+    lbPick(lb.shown[lb.active].nickname);
+  } else if (e.key === 'Escape' && lb.open) {
+    e.preventDefault();
+    lbClose();
+  }
+});
+// mousedown (not click) so the pick happens before the input's blur closes the list
+$('lbList').addEventListener('mousedown', e => {
+  const li = e.target.closest('[role=option]');
+  if (!li) return;
+  e.preventDefault();
+  lbPick(li.dataset.name);
+});
+$('search').addEventListener('submit', lbClose);
+
+// ---------- Matches box quick picks ----------
+
+const COUNT_OPTIONS = ['25', '50', '100', '200', '300', 'All'];
+const countInput = $('count');
+const countList = $('countList');
+let countActive = -1;
+
+countList.innerHTML = COUNT_OPTIONS.map((o, i) =>
+  `<li role="option" id="count-${i}" data-value="${o}" aria-selected="false">${o === 'All' ? 'All <span>(every match)</span>' : o}</li>`).join('');
+
+function countHighlight() {
+  countList.querySelectorAll('[role=option]').forEach((li, i) => li.setAttribute('aria-selected', String(i === countActive)));
+  if (countActive >= 0) countInput.setAttribute('aria-activedescendant', `count-${countActive}`);
+  else countInput.removeAttribute('aria-activedescendant');
+}
+function countOpen() {
+  if (!countList.hidden) return;
+  countList.hidden = false;
+  countInput.setAttribute('aria-expanded', 'true');
+  countActive = COUNT_OPTIONS.findIndex(o => o.toLowerCase() === countInput.value.trim().toLowerCase());
+  countHighlight();
+}
+function countClose() {
+  countList.hidden = true;
+  countInput.setAttribute('aria-expanded', 'false');
+  countInput.removeAttribute('aria-activedescendant');
+}
+
+countInput.addEventListener('focus', () => { countOpen(); countInput.select(); });
+countInput.addEventListener('click', countOpen);
+countInput.addEventListener('blur', () => setTimeout(countClose, 120));
+countInput.addEventListener('input', () => { countActive = -1; countHighlight(); });
+countInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    countOpen();
+    const n = COUNT_OPTIONS.length;
+    countActive = e.key === 'ArrowDown' ? (countActive + 1) % n : countActive < 0 ? n - 1 : (countActive - 1 + n) % n;
+    countHighlight();
+  } else if (e.key === 'Enter' && !countList.hidden && countActive >= 0) {
+    e.preventDefault();
+    countInput.value = COUNT_OPTIONS[countActive];
+    countClose();
+  } else if (e.key === 'Escape') {
+    countClose();
+  }
+});
+countList.addEventListener('mousedown', e => {
+  const li = e.target.closest('[role=option]');
+  if (!li) return;
+  e.preventDefault();
+  countInput.value = li.dataset.value;
+  countClose();
+});
 
 // Support shareable links: ?player=Name
 const initial = new URLSearchParams(location.search).get('player');

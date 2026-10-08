@@ -129,6 +129,7 @@ export function runsForPlayer(match, uuid, { includeResets = false } = {}) {
       bt: match.bt,
       attempt: i,
       won: match.winner === uuid,
+      draw: match.winner == null,   // no winner recorded
       forfeited: match.forfeited,
       completed: rel[EV.FINISH] != null,
       finish: rel[EV.FINISH] ?? null,
@@ -141,6 +142,9 @@ export function runsForPlayer(match, uuid, { includeResets = false } = {}) {
   });
   return runs;
 }
+
+// Wins / (wins + losses); draws don't count either way. null when no decided matches.
+export const winRate = s => (s.wins + s.losses ? s.wins / (s.wins + s.losses) : null);
 
 export function stats(values) {
   const v = values.filter(x => x != null && Number.isFinite(x)).sort((a, b) => a - b);
@@ -168,6 +172,8 @@ export function summarize(runs) {
     runs: runs.length,
     matches: firstAttempts.length,
     wins: firstAttempts.filter(r => r.won).length,
+    losses: firstAttempts.filter(r => !r.won && !r.draw).length,
+    draws: firstAttempts.filter(r => r.draw).length,
     completions: runs.filter(r => r.completed).length,
     fortressFirst: runs.filter(r => r.route === 'fortress').length,
     finish: stats(runs.map(r => r.finish)),

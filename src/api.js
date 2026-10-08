@@ -56,6 +56,15 @@ export async function getUser(name) {
   }
 }
 
+// Elo leaderboard (the API returns the top 150) for a season. Fetched once per page load.
+let leaderboard = null;
+export function getLeaderboard(season) {
+  leaderboard ??= getJSON(`/leaderboard?season=${season}`)
+    .then(d => d.users)
+    .catch(e => { leaderboard = null; throw e; });
+  return leaderboard;
+}
+
 // List match ids (newest first), paging with `before`.
 async function listMatches(uuid, { count, type, season }, onWait) {
   const out = [];

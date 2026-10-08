@@ -16,16 +16,28 @@
       <p class="sub">Look up any MCSR Ranked player and see their average splits, broken down by overworld and bastion type.
         <span class="season-note">All stats cover Season 12 matches only.</span></p>
       <form id="search" class="search" autocomplete="off">
-        <label class="field grow">
-          <span>Player</span>
-          <input id="name" name="name" placeholder="Nickname or UUID" required>
-        </label>
-        <label class="field">
-          <span>Matches</span>
-          <select id="count">
-            <option>25</option><option selected>50</option><option>100</option><option>200</option><option>300</option>
-          </select>
-        </label>
+        <div class="field grow">
+          <label for="name">Player</label>
+          <!-- Drop-down of the Season 12 top 150 (filled by src/app.js). -->
+          <div class="combo">
+            <input id="name" name="name" placeholder="Nickname or UUID, or pick from the top 150" required
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="lbList">
+            <div class="lb-pop" id="lbPop" hidden>
+              <div class="lb-head"><span>#</span><span>Player</span><span>Elo</span></div>
+              <ul class="lb-list" id="lbList" role="listbox" aria-label="Top 150 players"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="count">Matches</label>
+          <!-- Type a number or "All", or pick from the quick list (src/app.js). -->
+          <div class="combo count-combo">
+            <input id="count" value="50" inputmode="numeric" autocomplete="off" spellcheck="false"
+              role="combobox" aria-autocomplete="none" aria-expanded="false" aria-controls="countList"
+              title="Type a number of matches, or All for every Season 12 match">
+            <ul class="count-list" id="countList" role="listbox" aria-label="Number of matches" hidden></ul>
+          </div>
+        </div>
         <label class="field">
           <span>Mode</span>
           <select id="type">
@@ -40,6 +52,15 @@
       <div id="status" class="status" role="status" hidden></div>
     </div>
   </header>
+
+  <!-- Sticks to the top of the window while scrolling; filled in after a search. -->
+  <div class="stickybar" id="stickyBar" hidden>
+    <div class="wrap stickybar-inner">
+      <span class="sb-player" id="sbPlayer"></span>
+      <span class="sb-filters" id="sbFilters"></span>
+      <span class="sb-meta" id="sbMeta"></span>
+    </div>
+  </div>
 
   <main class="wrap" id="results" hidden>
     <section class="player" id="player"></section>
@@ -59,6 +80,7 @@
         <h2>Splits</h2>
         <span class="muted" id="splitsNote"></span>
       </div>
+      <div class="filter-line" data-filters></div>
       <div class="bar" id="splitBar"></div>
       <div class="table-scroll"><table class="splits" id="splitsTable"></table></div>
     </section>
@@ -68,6 +90,7 @@
         <h2>By overworld type</h2>
         <span class="muted">Milestones are time from spawn. Click a header to sort, a row to filter.</span>
       </div>
+      <div class="filter-line" data-filters></div>
       <div class="table-scroll"><table class="pivot" id="owTable"></table></div>
     </section>
 
@@ -76,6 +99,7 @@
         <h2>By bastion type</h2>
         <span class="muted">Bastion milestones are time from entering the bastion. Click a header to sort, a row to filter.</span>
       </div>
+      <div class="filter-line" data-filters></div>
       <div class="table-scroll"><table class="pivot" id="btTable"></table></div>
     </section>
 
@@ -88,11 +112,12 @@
         Terrain to Bastion, Bastion and Fortress splits only count bastion-first runs; fortress-first runs are excluded from those three.
         A reset restarts the seed, so post-reset attempts are left out unless you include them.</p>
       <p id="how-ranks"><strong>How % is calculated.</strong> Each split's Top / Bottom % compares your average time for that split
-        with every time for the same split in the <strong><span id="baselineMatches">350</span> most recent ranked matches<span id="baselineSeason"> of season 12</span></strong>
+        with every time for the same split in the <strong id="baselineSample">350 most recent ranked matches of season 12</strong>
         (all players, collected <span id="baselineDate">8 October 2026</span>). "Top 10%" means your average is faster than 90% of those runs.
         Later splits are compared against fewer runs, because many games end before reaching them.
         Netherite = top 5%, Diamond = top 20%, Emerald = top 40%, Gold = top 60%, Iron = bottom 40%, Coal = bottom 20%.
-        With a seed-type filter on, you are compared against runs on the same seed type when the sample has at least 30 of them.</p>
+        With a seed-type filter on, the "Compare to" switch in Split Performance chooses between other players' runs on the same seed type
+        and all runs. Same-type comparisons need at least 30 matching runs in the sample; splits with fewer use all runs, and the panel says which.</p>
       <p id="how-dist"><strong>How the rank distribution is calculated.</strong> This chart uses Elo ranks (Coal I to Netherite), which are different from the split tiers above.
         There is no list of every ranked player, so it is built from a <strong>sample</strong>: <span id="distDetails">match pages spread evenly across the season</span>.
         Every player in those matches who has finished placements is counted once, at their current Elo.

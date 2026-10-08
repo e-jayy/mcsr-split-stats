@@ -32,11 +32,12 @@ Then open http://localhost:5173 (or `http://localhost:5173/?player=Feinberg` to 
   | Iron | bottom 40% |
   | Coal | bottom 20% |
 
-  The comparison data is `data/baseline.json`, a sample of recent ranked matches from all players.
-  Refresh it whenever you like (takes ~8 minutes because of the rate limit):
+  The comparison data is `data/baseline.json`, ranked matches from all players sampled at random
+  points across the season. Grow it whenever you like; each run adds to the existing sample, saves
+  every 100 matches and can be stopped and resumed (about 2,500 matches per hour because of the rate limit):
 
   ```
-  node scripts/build-baseline.js 350
+  node scripts/build-baseline.js --target 5000
   ```
 - **Splits**: Overworld → Terrain to Bastion → Bastion → Fortress → Blind travel → Stronghold → End, each with
   average, best, "Avg End of Split" (the average point in the run when that split ends), and the sample size.

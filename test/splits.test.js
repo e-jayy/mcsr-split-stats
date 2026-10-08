@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { trimMatch, runsForPlayer, summarize, fmt } from '../src/splits.js';
+import { trimMatch, runsForPlayer, summarize, fmt, winRate } from '../src/splits.js';
 
 const A = 'aaa', B = 'bbb';
 const ev = (uuid, time, type) => ({ uuid, time, type });
@@ -67,4 +67,13 @@ test('fmt', () => {
   assert.equal(fmt(59960), '1:00.0');
   assert.equal(fmt(5400), '0:05.4');
   assert.equal(fmt(null), '—');
+});
+
+test('win rate ignores draws', () => {
+  const m = (id, winner) => trimMatch({ id, date: 0, result: { uuid: winner }, timelines: [ev(A, 1000, 'story.smelt_iron')] });
+  const runs = [m(1, A), m(2, A), m(3, B), m(4, null), m(5, null)].flatMap(x => runsForPlayer(x, A));
+  const sum = summarize(runs);
+  assert.deepEqual([sum.wins, sum.losses, sum.draws], [2, 1, 2]);
+  assert.equal(winRate(sum), 2 / 3);
+  assert.equal(winRate(summarize(runsForPlayer(m(6, null), A))), null);
 });

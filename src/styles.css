@@ -45,6 +45,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Keep `hidden` working on elements whose CSS sets a display (e.g. main is display:flex). */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -70,6 +72,43 @@ a { color: var(--accent); }
 .search { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 16px; color: var(--muted); }
 .field.grow { flex: 1 1 220px; }
+
+/* Player box + top-150 drop-down */
+.combo { position: relative; }
+.combo input { width: 100%; color: var(--text); }
+.lb-pop {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
+  background: var(--zinc-900); border: 1px solid var(--line-strong); border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); overflow: hidden;
+}
+.lb-head, .lb-list li[role=option] {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 12px;
+}
+.lb-head { color: var(--muted); border-bottom: 1px solid var(--line); background: var(--zinc-800); }
+.lb-head span:last-child { text-align: right; }
+.lb-list { list-style: none; margin: 0; padding: 4px 0; max-height: 360px; overflow-y: auto; color: var(--text); }
+.lb-list li[role=option] { cursor: pointer; }
+.lb-list li[role=option]:hover, .lb-list li[aria-selected=true] { background: var(--zinc-800); }
+.lb-list li[aria-selected=true] { box-shadow: inset 3px 0 0 var(--accent); }
+.lb-rank { color: var(--muted); }
+.lb-name { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name img { width: 20px; height: 20px; border-radius: 3px; image-rendering: pixelated; flex: none; }
+.lb-elo { display: inline-flex; align-items: center; justify-content: flex-end; }
+.lb-elo .px-icon { margin-right: 6px; }
+.lb-msg { padding: 10px 12px; color: var(--muted); }
+
+/* Matches box: type a number or All, or pick from the quick list */
+.count-combo input { width: 96px; }
+.count-list {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 20; min-width: 100%;
+  list-style: none; margin: 0; padding: 4px 0; color: var(--text); white-space: nowrap;
+  background: var(--zinc-900); border: 1px solid var(--line-strong); border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.count-list li { padding: 3px 12px; cursor: pointer; }
+.count-list li span { color: var(--muted); }
+.count-list li:hover, .count-list li[aria-selected=true] { background: var(--zinc-800); }
+.count-list li[aria-selected=true] { box-shadow: inset 3px 0 0 var(--accent); }
 input, select, button { font: inherit; color: inherit; }
 input, select {
   height: 40px; padding: 0 12px; border-radius: 8px;
@@ -155,7 +194,36 @@ td.slow { background: var(--bad-bg); color: var(--bad); }
 
 .pivot tbody tr { cursor: pointer; }
 .pivot tbody tr:hover td { background: var(--surface-2); }
-.pivot tbody tr.active td:first-child { }
+/* Selected seed type: tinted, outlined in the brand green, with a check before its name. */
+.pivot tbody tr.active { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pivot tbody tr.active td:not(.fast):not(.slow) { background: rgba(107, 165, 43, 0.14); }
+.pivot tbody tr.active td:first-child { color: #9bd35a; }
+.pivot tbody tr.active td:first-child::before { content: '✓ '; }
+
+/* Active filter tags (Split Performance, Splits, both type tables). */
+.filter-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -4px 0 12px; }
+.filter-line.center { justify-content: center; margin: 10px 0 0; text-shadow: none; }
+.ftag-label { color: var(--muted); }
+.ftag {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border: 1px solid var(--accent); background: rgba(107, 165, 43, 0.16); color: var(--text);
+  border-radius: 999px; padding: 1px 10px; font: inherit;
+}
+.ftag b { color: #9bd35a; font-weight: 400; }
+.ftag span { color: var(--muted); }
+.ftag:hover span, .ftag:focus-visible span { color: var(--text); }
+
+/* Split Performance "Compare to" switch. */
+.compare { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; margin-top: 10px; text-shadow: none; }
+.compare-label { color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.seg button {
+  font: inherit; color: var(--muted); background: var(--surface-2); border: 0; padding: 3px 12px; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.compare-note { text-align: center; color: var(--muted); margin: 6px auto 0; max-width: 640px; text-shadow: none; }
 .pivot th.group { text-align: center; border-bottom: 0; padding-bottom: 0; }
 
 .notes { color: var(--muted); font-size: 16px; }
@@ -167,6 +235,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
   .top { padding-top: 24px; }
   .card { padding: 14px; }
   .chips .label { width: 100%; }
+  .field.grow { flex-basis: 100%; }   /* Player box (and its top-150 list) gets the full width */
 }
 
 /* ---------- Split Performance panel (Minecraft GUI look, always dark) ---------- */
@@ -203,7 +272,35 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .perf-note { text-align: center; font-size: 16px; margin: 12px 0 0; text-shadow: none; }
 .perf-note a { color: var(--muted); }
 .perf-note a:hover { color: var(--zinc-200); }
-#how-ranks, #how-dist { scroll-margin-top: 24px; border-radius: 6px; }
+#how-ranks, #how-dist { scroll-margin-top: 72px; border-radius: 6px; }   /* clears the sticky bar */
+
+/* ---------- sticky top bar ---------- */
+.stickybar {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(39, 39, 42, 0.92);   /* zinc-800, like the official header */
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.stickybar-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-top: 8px; padding-bottom: 8px; }
+.sb-player { display: inline-flex; align-items: center; gap: 8px; font-size: 24px; color: var(--text); }
+.sb-player img { width: 24px; height: 24px; border-radius: 4px; image-rendering: pixelated; }
+.sb-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sb-meta { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); }
+.sb-meta b { color: var(--text); font-weight: 400; }
+.sb-mode {
+  border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; color: var(--text); background: var(--zinc-900);
+}
+@media (max-width: 640px) {
+  .stickybar-inner { gap: 4px 10px; padding-top: 6px; padding-bottom: 6px; }
+  .sb-player { font-size: 16px; }
+  .sb-player img { width: 18px; height: 18px; }
+  .sb-meta { margin-left: auto; gap: 8px; }
+  .sb-long { display: none; }
+  .sb-filters { order: 3; flex-basis: 100%; }      /* tags on their own row under player + meta */
+  .stickybar .ftag { padding: 0 8px; }
+  .stickybar .ftag-kind { display: none; }
+}
 #how-ranks:target, #how-dist:target { animation: flash 1.6s ease-out; }
 
 /* ---------- rank distribution chart ---------- */

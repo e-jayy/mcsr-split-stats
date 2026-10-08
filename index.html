@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCSR Split Stats</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <h1>MCSR Split Stats</h1>
+      <p class="sub">Look up any MCSR Ranked player and see their average splits, broken down by overworld and bastion type.</p>
+      <form id="search" class="search" autocomplete="off">
+        <label class="field grow">
+          <span>Player</span>
+          <input id="name" name="name" placeholder="Nickname or UUID" required>
+        </label>
+        <label class="field">
+          <span>Matches</span>
+          <select id="count">
+            <option>25</option><option selected>50</option><option>100</option><option>200</option><option>300</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Mode</span>
+          <select id="type">
+            <option value="2" selected>Ranked</option>
+            <option value="1">Casual</option>
+            <option value="3">Private</option>
+            <option value="">All</option>
+          </select>
+        </label>
+        <label class="field narrow">
+          <span>Season</span>
+          <input id="season" type="number" min="0" placeholder="Current">
+        </label>
+        <button type="submit" id="go">Search</button>
+      </form>
+      <div id="status" class="status" role="status" hidden></div>
+    </div>
+  </header>
+
+  <main class="wrap" id="results" hidden>
+    <section class="player" id="player"></section>
+
+    <section class="filters">
+      <div class="chips" id="owChips" aria-label="Overworld type filter"></div>
+      <div class="chips" id="btChips" aria-label="Bastion type filter"></div>
+      <div class="toggles">
+        <label class="check"><input type="checkbox" id="resets"> Include post-reset attempts</label>
+      </div>
+    </section>
+
+    <section class="perf" id="perf" hidden></section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Splits</h2>
+        <span class="muted" id="splitsNote"></span>
+      </div>
+      <div class="bar" id="splitBar"></div>
+      <div class="table-scroll"><table class="splits" id="splitsTable"></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>By overworld type</h2>
+        <span class="muted">Milestones are time from spawn. Click a header to sort, a row to filter.</span>
+      </div>
+      <div class="table-scroll"><table class="pivot" id="owTable"></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>By bastion type</h2>
+        <span class="muted">Bastion milestones are time from entering the bastion. Click a header to sort, a row to filter.</span>
+      </div>
+      <div class="table-scroll"><table class="pivot" id="btTable"></table></div>
+    </section>
+
+    <footer class="notes">
+      <p><strong>How splits are measured.</strong> Each split runs between two timeline events from the match:
+        spawn → enter Nether → find bastion → find fortress → blind travel → follow eye (stronghold) → enter End → finish.
+        A split only counts when both ends happened, so forfeits still contribute the splits they reached.
+        Terrain to Bastion, Bastion and Fortress splits only count bastion-first runs; fortress-first runs are excluded from those three.
+        A reset restarts the seed, so post-reset attempts are left out unless you include them.</p>
+      <p><strong>How ranks work.</strong> Your average for each split is placed among split times from a sample of recent ranked matches by all players.
+        Netherite = top 5%, Diamond = top 20%, Emerald = top 40%, Gold = top 60%, Iron = bottom 40%, Coal = bottom 20%.
+        With a seed-type filter on, you are compared against runs on the same seed type when the sample has at least 30 of them.</p>
+      <p>Data from the <a href="https://docs.mcsrranked.com/" target="_blank" rel="noopener">MCSR Ranked API</a>. Match details are cached in your browser, so repeat searches are fast.
+        <button type="button" class="link" id="clearCache">Clear cache</button></p>
+    </footer>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

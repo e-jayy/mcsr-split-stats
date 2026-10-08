@@ -1,0 +1,11 @@
+{
+  "name": "mcsr-split-stats",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Average MCSR Ranked splits per player, broken down by overworld and bastion type.",
+  "scripts": {
+    "start": "node serve.js",
+    "test": "node --test test/*.test.js"
+  }
+}

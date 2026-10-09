@@ -154,6 +154,22 @@ function allRuns() {
   return state.matches.flatMap(m => runsForPlayer(m, state.user.uuid, { includeResets: state.includeResets }));
 }
 
+// Note beside the "Include post-reset attempts" box: how many loaded matches had a reset
+// (each reset starts the seed over, and by default only the first attempt counts).
+function renderResetsNote() {
+  const reset = state.matches.filter(m => runsForPlayer(m, state.user.uuid, { includeResets: true }).length > 1);
+  const note = $('resetsNote');
+  note.hidden = !reset.length;
+  if (!reset.length) return;
+  const extra = reset.reduce((n, m) => n + runsForPlayer(m, state.user.uuid, { includeResets: true }).length - 1, 0);
+  const matches = `${reset.length} match${reset.length > 1 ? 'es' : ''}`;
+  const attempts = `${extra} later attempt${extra > 1 ? 's' : ''}`;
+  note.textContent = state.includeResets
+    ? `Including ${attempts} from ${matches} with a reset.`
+    : `${matches} had a reset; the ${attempts} after ${reset.length > 1 ? 'them' : 'it'} ${extra > 1 ? 'aren’t' : 'isn’t'} counted. ` +
+      `Tick to include ${extra > 1 ? 'them' : 'it'}.`;
+}
+
 const filterRuns = (runs, { ow = state.ow, bt = state.bt } = {}) =>
   runs.filter(r => (!ow || r.ow === ow) && (!bt || r.bt === bt));
 
@@ -167,6 +183,7 @@ function render() {
   renderStickyBar(all);
   renderPlayer(all);
   renderChips(runs);
+  renderResetsNote();
   const sum = summarize(filterRuns(runs));
   const ranks = rankSplits(sum);
   renderPerformance(sum, ranks);

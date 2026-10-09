@@ -36,3 +36,19 @@ test('population narrows by seed type only with enough samples', () => {
   assert.equal(population({ runs }, 0, { ow: 'SHIPWRECK' }).narrowed, false);
   assert.equal(population({ runs }, 0, { ow: 'SHIPWRECK' }).values.length, 45);
 });
+
+test('playerPopulation uses one average per player with enough runs', async () => {
+  const { playerPopulation } = await import('../src/rank.js');
+  const sc = (m0, n0) => ({ m: [m0, null], n: [n0, 0], f: null, fn: 0 });
+  const players = [
+    ...Array.from({ length: 35 }, (_, i) => ({ scopes: { all: sc(100 + i, 5), 'ow:VILLAGE': sc(200 + i, 3) } })),
+    { scopes: { all: sc(50, 2) } },                    // too few runs: left out
+  ];
+  const data = { players };
+  assert.equal(playerPopulation(data, 0).values.length, 35);
+  const v = playerPopulation(data, 0, { ow: 'VILLAGE' });
+  assert.ok(v.narrowed);
+  assert.equal(Math.min(...v.values), 200);
+  assert.equal(playerPopulation(data, 0, { bt: 'HOUSING' }).narrowed, false);
+  assert.equal(playerPopulation(data, 0, { ow: 'VILLAGE', bt: 'HOUSING' }).narrowed, false);
+});

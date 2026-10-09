@@ -3,7 +3,7 @@ import {
   SPLITS, MILESTONE_NAMES, OVERWORLD_TYPES, BASTION_TYPES,
   runsForPlayer, summarize, groupBy, prettyType, fmt, winRate,
 } from './splits.js';
-import { TIERS, tierFor, percentile, rankLabel, population, tierIcon } from './rank.js';
+import { TIERS, tierFor, percentile, rankLabel, population, playerPopulation, tierIcon } from './rank.js';
 import { DIVISIONS, divisionFor, divisionCounts, eloPercentile } from './elo.js';
 
 const $ = id => document.getElementById(id);
@@ -27,13 +27,35 @@ const baselineReady = fetch('data/baseline.json')
   .then(b => { baseline = b; describeBaseline(b); })
   .catch(() => {});
 
+// Split averages for a random sample of ranked players (scripts/build-player-avgs.js).
+// Once there are enough of them, every "Top X%" compares averages with other players'
+// averages ("Top X% of players"); until then it falls back to single runs from `baseline`.
+const MIN_PLAYERS = 100;
+let playerAvgs = null;
+const playerAvgsReady = fetch(`data/player-avgs-s${SEASON}.json`)
+  .then(r => (r.ok ? r.json() : null))
+  .then(d => { playerAvgs = d; describeComparison(); })
+  .catch(() => {});
+const byPlayers = () => (playerAvgs?.players.length ?? 0) >= MIN_PLAYERS;
+const comparePop = (i, seed = {}) => (byPlayers() ? playerPopulation(playerAvgs, i, seed) : population(baseline, i, seed));
+
+// Footer explanation of what "Top X%" is compared against.
+function describeComparison() {
+  if (!byPlayers()) return;
+  const date = new Date(playerAvgs.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  $('howRanksBody').innerHTML =
+    `Each Top / Bottom % compares your <strong>average</strong> for a split with the <strong>averages of ` +
+    `${playerAvgs.players.length.toLocaleString()} ranked players</strong>, picked at random across every rank in season ${playerAvgs.season} ` +
+    `(each from their last ${playerAvgs.perPlayer} ranked matches, collected ${date}${playerAvgs.complete ? '' : ', still growing'}). ` +
+    `"Top 10%" means your average is faster than 90% of those players' averages. A player counts for a split once they have at least 3 runs of it.`;
+}
 const state = {
   user: null,
   matches: [],
   ow: null,          // overworld type filter
   bt: null,          // bastion type filter
   // Column sort per table: { col, dir } where dir 1 = ascending, -1 = descending.
-  sort: { splits: { col: 'order', dir: 1 }, ow: { col: 'order', dir: 1 }, bt: { col: 'order', dir: 1 } },
+  sort: { splits: { col: 'order', dir: 1 }, ow: { col: 'order', dir: 1 }, bt: { col: 'order', dir: 1 }, top: { col: 'avg', dir: 1 } },
   includeResets: false,
   compare: 'type',   // Split Performance with a filter on: rank vs. same seed type ('type') or all runs ('all')
   open: new Set(),   // expanded split rows
@@ -90,7 +112,7 @@ async function search(name) {
         p.done / Math.max(1, p.total));
     });
     if (!matches.length) throw new Error(`${user.nickname} has no Season ${SEASON} matches for these settings.`);
-    await baselineReady;
+    await Promise.all([baselineReady, playerAvgsReady]);
     // Remember the mode used for this search (the dropdown can change before the next search).
     const modeLabel = $('type').selectedOptions[0].textContent;
     Object.assign(state, { user, matches, modeLabel, ow: null, bt: null, open: new Set() });
@@ -151,6 +173,7 @@ function render() {
   renderBastion(filterRuns(runs, { bt: null }));
   renderFilters();
   renderRankDist();
+  renderTopPlayers();   // highlights the searched player if they're in the top 150
 }
 
 // ---------- rank distribution ----------
@@ -263,13 +286,13 @@ function rankSplits(sum) {
   const out = { scopes: [] };
   const filtering = (state.ow || state.bt) && state.compare === 'type';
   const rank = (key, name, i, value) => {
-    let pop = population(baseline, i, {}), used = 'all';
+    let pop = comparePop(i), used = 'all';
     if (filtering) {
       const tries = [{ ow: state.ow, bt: state.bt }];
       const own = SPLIT_SEED[key];
       if (state.ow && state.bt && own) tries.push({ [own]: state[own] });
       for (const seed of tries) {
-        const p = population(baseline, i, seed);
+        const p = comparePop(i, seed);
         if (p.narrowed) { pop = p; used = seed; break; }
       }
     }
@@ -282,8 +305,12 @@ function rankSplits(sum) {
   return out;
 }
 
-const scopeName = seed => (seed === 'all' ? 'all runs'
-  : `${[seed.ow && prettyType(seed.ow), seed.bt && prettyType(seed.bt)].filter(Boolean).join(' + ')} runs`);
+// What a split was compared against, e.g. "players on Shipwreck" or "Shipwreck runs".
+function scopeName(seed) {
+  const types = seed === 'all' ? '' : [seed.ow && prettyType(seed.ow), seed.bt && prettyType(seed.bt)].filter(Boolean).join(' + ');
+  if (byPlayers()) return types ? `players on ${types}` : 'all players';
+  return types ? `${types} runs` : 'all runs';
+}
 
 // Compare-to switch for Split Performance; only shown while a seed-type filter is on.
 function compareSwitch(ranks) {
@@ -291,23 +318,25 @@ function compareSwitch(ranks) {
   const scope = [state.ow && prettyType(state.ow), state.bt && prettyType(state.bt)].filter(Boolean).join(' + ');
   const opt = (value, label) =>
     `<button type="button" data-compare="${value}" aria-pressed="${state.compare === value}"${state.compare === value ? ' class="on"' : ''}>${label}</button>`;
-  let note = 'Ranked against all runs, on every seed type.';
+  let note = byPlayers()
+    ? "Ranked against other players' averages on every seed type."
+    : 'Ranked against all runs, on every seed type.';
   if (state.compare === 'type') {
-    // Group splits by what they were compared against, e.g. "Overworld vs. Shipwreck runs".
+    // Group splits by what they were compared against, e.g. "Overworld vs. players on Shipwreck".
     const groups = new Map();
     for (const { name, used } of ranks.scopes) {
       const label = scopeName(used);
       groups.set(label, [...(groups.get(label) || []), name]);
     }
-    const wanted = `${scope} runs`;
+    const wanted = scopeName({ ow: state.ow, bt: state.bt });
     note = [...groups.keys()].every(k => k === wanted)
-      ? `Ranked against other players' ${wanted} only.`
+      ? `Ranked against ${wanted} only.`
       : `Not enough ${wanted} in the sample for every split, so: ` +
         [...groups].map(([label, names]) => `${names.join(', ')} vs. ${label}`).join('; ') + '.';
   }
   return `<div class="compare">
       <span class="compare-label">Compare to</span>
-      <div class="seg" role="group" aria-label="Compare to">${opt('type', `${scope} runs`)}${opt('all', 'All runs')}</div>
+      <div class="seg" role="group" aria-label="Compare to">${opt('type', scope)}${opt('all', 'All seed types')}</div>
     </div>
     <p class="compare-note">${note}</p>`;
 }
@@ -523,7 +552,7 @@ function renderSplits(sum, ranks) {
 // Percentile of the player's average for split i on one seed type, vs. other players' runs on that type.
 function typeRank(i, value, seed) {
   if (!baseline || value == null) return null;
-  return percentile(value, population(baseline, i, seed).values);
+  return percentile(value, comparePop(i, seed).values);
 }
 const pctBadge = pct => rankHtml(pct == null ? null : { pct, tier: tierFor(pct), label: rankLabel(pct) });
 
@@ -576,7 +605,7 @@ function renderOverworld(runs) {
     { label: 'Iron pick', get: ms('story.iron_tools') },
     { label: 'Enter Nether', get: s => val(s.splits.overworld) },
     { key: 'netherRank', label: 'Rank', render: pctBadge,
-      tip: "Your average Enter Nether time vs. all players' runs on this overworld type",
+      tip: `Your average Enter Nether time vs. ${byPlayers() ? "other players' averages" : "all players' runs"} on this overworld type`,
       get: (s, t) => typeRank(0, val(s.splits.overworld), { ow: t, bt: state.bt }) },
     { label: 'Terrain to Bastion', get: s => val(s.splits.nether) },
     { label: 'Finish', get: s => val(s.finish) },
@@ -590,7 +619,7 @@ function renderBastion(runs) {
     { label: 'Loot chest', get: ms('nether.loot_bastion') },
     { label: 'Bastion split', tip: 'Enter Bastion to Enter Fortress', get: s => val(s.splits.bastion) },
     { key: 'bastionRank', label: 'Rank', render: pctBadge,
-      tip: "Your average Bastion split vs. all players' runs on this bastion type",
+      tip: `Your average Bastion split vs. ${byPlayers() ? "other players' averages" : "all players' runs"} on this bastion type`,
       get: (s, t) => typeRank(2, val(s.splits.bastion), { ow: state.ow, bt: t }) },
     { label: 'Fortress split', tip: 'Fortress Enter to Blind', get: s => val(s.splits.fortress) },
     { label: 'Finish', get: s => val(s.finish) },
@@ -690,6 +719,122 @@ $('lbList').addEventListener('mousedown', e => {
   lbPick(li.dataset.name);
 });
 $('search').addEventListener('submit', lbClose);
+
+// ---------- Top players (Elo top 150, data/players-s12.json from scripts/build-players.js) ----------
+
+const TP_MIN_RUNS = 3;   // a player needs this many runs of the split (on the seed type) to be listed
+const TP_TIERS = [
+  { key: 'all', label: 'All', max: 100 },
+  { key: 'top1', label: 'Top 1%', max: 1 },
+  { key: 'netherite', label: 'Top 5%', max: 5, tier: 'netherite' },
+  { key: 'diamond', label: 'Top 20%', max: 20, tier: 'diamond' },
+  { key: 'emerald', label: 'Top 40%', max: 40, tier: 'emerald' },
+  { key: 'gold', label: 'Top 60%', max: 60, tier: 'gold' },
+];
+const tp = { data: null, split: 'overworld', seed: '', tier: 'all' };
+
+const tpReady = fetch(`data/players-s${SEASON}.json`)
+  .then(r => (r.ok ? r.json() : null))
+  .then(async d => {
+    tp.data = d;
+    await Promise.all([baselineReady, playerAvgsReady]);
+    if (d) initTopPlayers();
+  })
+  .catch(() => {});
+
+function initTopPlayers() {
+  $('topPlayers').hidden = false;
+  $('tpSplit').innerHTML = SPLITS.map(s => `<option value="${s.key}">${s.name}</option>`).join('') +
+    '<option value="finish">Finish time</option>';
+  $('tpSeed').innerHTML = '<option value="">Any seed type</option>' +
+    `<optgroup label="Overworld type">${OVERWORLD_TYPES.map(t => `<option value="ow:${t}">${prettyType(t)}</option>`).join('')}</optgroup>` +
+    `<optgroup label="Bastion type">${BASTION_TYPES.map(t => `<option value="bt:${t}">${prettyType(t)}</option>`).join('')}</optgroup>`;
+  $('tpSplit').addEventListener('change', e => { tp.split = e.target.value; renderTopPlayers(); });
+  $('tpSeed').addEventListener('change', e => { tp.seed = e.target.value; renderTopPlayers(); });
+  renderTopPlayers();
+}
+
+// One row per listed player for the chosen split + seed type, with percentile vs. all sample runs.
+function tpRows() {
+  const i = tp.split === 'finish' ? 'finish' : SPLITS.findIndex(s => s.key === tp.split);
+  const [kind, type] = tp.seed ? tp.seed.split(':') : [];
+  const pop = baseline ? comparePop(i, kind ? { [kind]: type } : {}) : null;
+  const rows = [];
+  for (const p of tp.data.players) {
+    const sc = p.scopes[tp.seed || 'all'];
+    if (!sc) continue;
+    const avg = i === 'finish' ? sc.f : sc.m[i];
+    const runs = i === 'finish' ? sc.fn : sc.n[i];
+    if (avg == null || runs < TP_MIN_RUNS) continue;
+    rows.push({ p, avg, runs, pct: pop ? percentile(avg, pop.values) : null });
+  }
+  return { rows, narrowed: pop?.narrowed, sample: pop?.values.length ?? 0 };
+}
+
+function renderTopPlayers() {
+  if (!tp.data) return;
+  const { rows, narrowed, sample } = tpRows();
+  const splitName = tp.split === 'finish' ? 'Finish time' : SPLITS.find(s => s.key === tp.split).name;
+  const seedName = tp.seed ? prettyType(tp.seed.split(':')[1]) : '';
+
+  $('tpNote').textContent = `Season ${tp.data.season} Elo top 150 · ${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of 150 so far) · `}` +
+    `averages from each player's last ${tp.data.perPlayer} ranked matches`;
+
+  // Tier chips with counts.
+  $('tpTiers').innerHTML = '<span class="label">Show</span>' + TP_TIERS.map(t => {
+    const count = t.key === 'all' ? rows.length : rows.filter(r => r.pct != null && r.pct <= t.max).length;
+    return `<button type="button" class="chip${tp.tier === t.key ? ' on' : ''}" data-tptier="${t.key}">` +
+      `${t.tier ? tierIcon(t.tier, 14) : ''}${t.label}<small>${count}</small></button>`;
+  }).join('');
+
+  const tier = TP_TIERS.find(t => t.key === tp.tier);
+  const shown = tier.key === 'all' ? rows : rows.filter(r => r.pct != null && r.pct <= tier.max);
+  const cols = [
+    { key: 'player', label: 'Player', dir: 1, get: r => r.p.rank },
+    { key: 'elo', label: 'Elo', dir: -1, get: r => r.p.elo },
+    { key: 'avg', label: `Avg ${splitName}`, dir: 1, get: r => r.avg },
+    { key: 'runs', label: 'Runs', dir: -1, get: r => r.runs },
+    { key: 'pct', label: 'Rank', dir: 1, get: r => r.pct,
+      tip: byPlayers()
+        ? `Player's average vs. the averages of ${playerAvgs.players.length} sampled players${seedName ? ` on ${seedName}` : ''}, across every rank`
+        : `Player's average vs. all ${seedName ? `${seedName} ` : ''}runs in the ${baseline?.matches.toLocaleString() ?? ''}-match sample` },
+  ];
+  const { col, dir } = state.sort.top;
+  const sorted = sortBy(shown, (cols.find(c => c.key === col) || cols[2]).get, dir);
+  const me = state.user?.uuid;
+
+  let html = sortHeader('top', cols) + '<tbody>';
+  sorted.forEach((r, n) => {
+    html += `<tr data-name="${esc(r.p.nickname)}" class="${r.p.uuid === me ? 'active' : ''}" title="Load ${esc(r.p.nickname)}'s stats">
+      <td><span class="tp-pos">${n + 1}</span><img class="tp-head" src="https://mc-heads.net/avatar/${r.p.uuid}/20" alt="" loading="lazy">${esc(r.p.nickname)}<span class="tp-lb">#${r.p.rank}</span></td>
+      <td>${r.p.elo}</td><td><b>${fmt(r.avg)}</b></td><td class="n">${r.runs}</td><td>${pctBadge(r.pct)}</td></tr>`;
+  });
+  if (!sorted.length) {
+    html += `<tr class="tp-empty"><td colspan="5">No players ${tier.key === 'all' ? `with ${TP_MIN_RUNS}+ runs of this split${seedName ? ` on ${seedName}` : ''}` : `in ${tier.label.toLowerCase()} for this split${seedName ? ` on ${seedName}` : ''}`}.</td></tr>`;
+  }
+  const table = $('tpTable');
+  table.innerHTML = html + '</tbody>';
+  bindSort(table, 'top', renderTopPlayers);
+  table.querySelectorAll('tbody tr[data-name]').forEach(tr => tr.addEventListener('click', () => {
+    nameInput.value = tr.dataset.name;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    search(tr.dataset.name);
+  }));
+
+  $('tpCaveat').textContent = `Players are listed when they have at least ${TP_MIN_RUNS} runs of this split` +
+    `${seedName ? ` on ${seedName} seeds` : ''} in their last ${tp.data.perPlayer} matches. Ranks compare each average with ` +
+    (byPlayers()
+      ? `the averages of ${sample.toLocaleString()} randomly sampled ranked players${narrowed ? ` on ${seedName}` : ''}, across every rank`
+      : `${narrowed ? `${sample.toLocaleString()} ${seedName} runs` : `${sample.toLocaleString()} runs on all seed types`} from the comparison sample`) +
+    `${tp.seed && !narrowed ? ` (too few for ${seedName} alone, so all seed types are used)` : ''}. Click a player to load their stats.`;
+}
+
+document.addEventListener('click', e => {
+  const chip = e.target.closest('[data-tptier]');
+  if (!chip) return;
+  tp.tier = chip.dataset.tptier;
+  renderTopPlayers();
+});
 
 // ---------- Matches box quick picks ----------
 

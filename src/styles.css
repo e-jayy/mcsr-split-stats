@@ -109,6 +109,20 @@ a { color: var(--accent); }
 .count-list li span { color: var(--muted); }
 .count-list li:hover, .count-list li[aria-selected=true] { background: var(--zinc-800); }
 .count-list li[aria-selected=true] { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Top players section */
+.topplayers-wrap { padding-bottom: 48px; }
+main:not([hidden]) + .topplayers-wrap { margin-top: -30px; }   /* sit in the results column's rhythm */
+.tp-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 12px; }
+.tp-controls select { color: var(--text); }
+.tp-tiers { margin-bottom: 10px; }
+.tp-tiers .chip .px-icon { margin-right: 4px; vertical-align: -2px; }
+.tp-table td:first-child { display: flex; align-items: center; gap: 8px; }
+.tp-pos { color: var(--muted); min-width: 2.2em; }
+.tp-head { width: 20px; height: 20px; border-radius: 3px; image-rendering: pixelated; flex: none; }
+.tp-lb { color: var(--muted); margin-left: 2px; }
+.tp-empty td { color: var(--muted); text-align: left !important; display: table-cell !important; }
+.tp-caveat { margin: 12px 0 0; }
 input, select, button { font: inherit; color: inherit; }
 input, select {
   height: 40px; padding: 0 12px; border-radius: 8px;

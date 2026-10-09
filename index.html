@@ -10,7 +10,10 @@
   <header class="top">
     <div class="wrap">
       <div class="title-row">
-        <h1>MCSR Split Stats</h1>
+        <a class="ranked-logo" href="https://mcsrranked.com/" target="_blank" rel="noopener" title="Open MCSR Ranked">
+          <img src="assets/mcsr-ranked-logo.png" alt="MCSR Ranked" width="46" height="40">
+        </a>
+        <h1><a class="home-link" href="./" title="Back to the start screen">MCSR Split Stats</a></h1>
         <span class="season-badge">Season 12</span>
       </div>
       <p class="sub">Look up any MCSR Ranked player and see their average splits, broken down by overworld and bastion type.
@@ -111,13 +114,14 @@
         A split only counts when both ends happened, so forfeits still contribute the splits they reached.
         Terrain to Bastion, Bastion and Fortress splits only count bastion-first runs; fortress-first runs are excluded from those three.
         A reset restarts the seed, so post-reset attempts are left out unless you include them.</p>
-      <p id="how-ranks"><strong>How % is calculated.</strong> Each split's Top / Bottom % compares your average time for that split
+      <p id="how-ranks"><strong>How % is calculated.</strong>
+        <span id="howRanksBody">Each split's Top / Bottom % compares your average time for that split
         with every time for the same split in the <strong id="baselineSample">350 most recent ranked matches of season 12</strong>
         (all players, collected <span id="baselineDate">8 October 2026</span>). "Top 10%" means your average is faster than 90% of those runs.
-        Later splits are compared against fewer runs, because many games end before reaching them.
+        Later splits are compared against fewer runs, because many games end before reaching them.</span>
         Netherite = top 5%, Diamond = top 20%, Emerald = top 40%, Gold = top 60%, Iron = bottom 40%, Coal = bottom 20%.
-        With a seed-type filter on, the "Compare to" switch in Split Performance chooses between other players' runs on the same seed type
-        and all runs. Same-type comparisons need at least 30 matching runs in the sample; splits with fewer use all runs, and the panel says which.</p>
+        With a seed-type filter on, the "Compare to" switch in Split Performance chooses between the same seed type and all seed types.
+        Same-type comparisons need at least 30 matches in the sample; splits with fewer fall back, and the panel says which.</p>
       <p id="how-dist"><strong>How the rank distribution is calculated.</strong> This chart uses Elo ranks (Coal I to Netherite), which are different from the split tiers above.
         There is no list of every ranked player, so it is built from a <strong>sample</strong>: <span id="distDetails">match pages spread evenly across the season</span>.
         Every player in those matches who has finished placements is counted once, at their current Elo.
@@ -128,6 +132,29 @@
         <button type="button" class="link" id="clearCache">Clear cache</button></p>
     </footer>
   </main>
+
+  <!-- Top players: shown with or without a search (filled by src/app.js). -->
+  <div class="wrap topplayers-wrap">
+    <section class="card" id="topPlayers" hidden>
+      <div class="card-head">
+        <h2>Top players</h2>
+        <span class="muted" id="tpNote"></span>
+      </div>
+      <div class="tp-controls">
+        <div class="field">
+          <label for="tpSplit">Split</label>
+          <select id="tpSplit"></select>
+        </div>
+        <div class="field">
+          <label for="tpSeed">Seed type</label>
+          <select id="tpSeed"></select>
+        </div>
+      </div>
+      <div class="chips tp-tiers" id="tpTiers" aria-label="Tier filter"></div>
+      <div class="table-scroll"><table class="pivot tp-table" id="tpTable"></table></div>
+      <p class="muted tp-caveat" id="tpCaveat"></p>
+    </section>
+  </div>
 
   <script type="module" src="src/app.js"></script>
 </body>

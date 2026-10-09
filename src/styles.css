@@ -56,6 +56,14 @@ body {
 }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
 h1 { margin: 0; font-size: 32px; font-weight: 400; }
+.ranked-logo { display: inline-flex; flex: none; border-radius: 4px; transition: transform .12s; }
+.ranked-logo img { display: block; width: 46px; height: 40px; image-rendering: pixelated; }
+.ranked-logo:hover { transform: scale(1.06); }
+.ranked-logo:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .ranked-logo { transition: none; } .ranked-logo:hover { transform: none; } }
+.home-link { color: inherit; text-decoration: none; }
+.home-link:hover { color: var(--accent); }
+.home-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 h2 { margin: 0; font-size: 24px; font-weight: 400; }
 b, strong { font-weight: 400; }
 .title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
@@ -109,6 +117,20 @@ a { color: var(--accent); }
 .count-list li span { color: var(--muted); }
 .count-list li:hover, .count-list li[aria-selected=true] { background: var(--zinc-800); }
 .count-list li[aria-selected=true] { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Top players section */
+.topplayers-wrap { padding-bottom: 48px; }
+main:not([hidden]) + .topplayers-wrap { margin-top: -30px; }   /* sit in the results column's rhythm */
+.tp-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 12px; }
+.tp-controls select { color: var(--text); }
+.tp-tiers { margin-bottom: 10px; }
+.tp-tiers .chip .px-icon { margin-right: 4px; vertical-align: -2px; }
+.tp-table td:first-child { display: flex; align-items: center; gap: 8px; }
+.tp-pos { color: var(--muted); min-width: 2.2em; }
+.tp-head { width: 20px; height: 20px; border-radius: 3px; image-rendering: pixelated; flex: none; }
+.tp-lb { color: var(--muted); margin-left: 2px; }
+.tp-empty td { color: var(--muted); text-align: left !important; display: table-cell !important; }
+.tp-caveat { margin: 12px 0 0; }
 input, select, button { font: inherit; color: inherit; }
 input, select {
   height: 40px; padding: 0 12px; border-radius: 8px;

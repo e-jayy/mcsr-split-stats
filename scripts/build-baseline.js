@@ -11,6 +11,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { trimMatch, runsForPlayer, SPLITS } from '../src/splits.js';
 import { get } from './lib/http.js';
+import { listMatches, seasonRange } from './lib/sample.js';
 
 const PER_POINT = 40;         // consecutive matches taken at each random point in the season
 const SAVE_EVERY = 100;
@@ -20,8 +21,7 @@ const SEASON = opt('--season', 12);
 const TARGET = opt('--target', 5000);
 const file = new URL('../data/baseline.json', import.meta.url);
 
-const list = (before, count) =>
-  get(`/matches?type=2&season=${SEASON}&count=${count}${before ? `&before=${before}` : ''}`);
+const list = (before, count) => listMatches(SEASON, before, count);
 
 // Existing sample. Older files have no match ids (they can't be extended without
 // risking duplicates), so they're kept on disk until the new sample is larger.
@@ -50,17 +50,12 @@ async function save() {
 }
 
 // Season id range: newest match, and the oldest via binary search on `before`.
-const [latest] = await list(null, 1);
-let lo = 1, hi = latest.id + 1;
-while (hi - lo > 2000) {
-  const mid = Math.floor((lo + hi) / 2);
-  (await list(mid, 1)).length ? (hi = mid) : (lo = mid);
-}
-console.log(`Season ${SEASON}: match ids ${lo}–${latest.id}, target ${TARGET} matches`);
+const { first: lo, last } = await seasonRange(SEASON);
+console.log(`Season ${SEASON}: match ids ${lo}–${last}, target ${TARGET} matches`);
 
 let added = 0;
 while (ids.size < TARGET) {
-  const before = lo + Math.floor(Math.random() * (latest.id - lo)) + 1;
+  const before = lo + Math.floor(Math.random() * (last - lo)) + 1;
   let page;
   try {
     page = await list(before, PER_POINT);

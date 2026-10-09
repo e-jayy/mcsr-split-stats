@@ -784,8 +784,10 @@ function renderTopPlayers() {
   const splitName = tp.split === 'finish' ? 'Finish time' : SPLITS.find(s => s.key === tp.split).name;
   const seedName = tp.seed ? prettyType(tp.seed.split(':')[1]) : '';
 
+  // When the snapshot was taken, so newer games missing from the list don't look like a bug.
+  const when = new Date(tp.data.generatedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   $('tpNote').textContent = `Season ${tp.data.season} Elo top 150 · ${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of 150 so far) · `}` +
-    `averages from each player's last ${tp.data.perPlayer} ranked matches`;
+    `averages from each player's last ${tp.data.perPlayer} ranked matches, as of ${when}`;
 
   // Tier chips with counts.
   $('tpTiers').innerHTML = '<span class="label">Show</span>' + TP_TIERS.map(t => {
@@ -828,8 +830,10 @@ function renderTopPlayers() {
     search(tr.dataset.name);
   }));
 
-  $('tpCaveat').textContent = `Players are listed when they have at least ${TP_MIN_RUNS} runs of this split` +
-    `${seedName ? ` on ${seedName} seeds` : ''} in their last ${tp.data.perPlayer} matches. Ranks compare each average with ` +
+  $('tpCaveat').textContent = (tp.split === 'finish'
+    ? `Players are listed when they have at least ${TP_MIN_RUNS} finished runs (completions)`
+    : `Players are listed when they have at least ${TP_MIN_RUNS} runs of this split`) +
+    `${seedName ? ` on ${seedName} seeds` : ''} in their last ${tp.data.perPlayer} matches, so games played since the date above aren't counted yet. Ranks compare each average with ` +
     (byPlayers()
       ? `the averages of ${sample.toLocaleString()} randomly sampled ranked players${narrowed ? ` on ${seedName}` : ''}, across every rank`
       : `${narrowed ? `${sample.toLocaleString()} ${seedName} runs` : `${sample.toLocaleString()} runs on all seed types`} from the comparison sample`) +

@@ -10,8 +10,9 @@
 // Results are written every 10 players. Throttled to stay under the API limit.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { trimMatch, runsForPlayer, summarize, SPLITS } from '../src/splits.js';
+import { trimMatch, runsForPlayer, SPLITS } from '../src/splits.js';
 import { get } from './lib/http.js';
+import { listMatches, seasonRange, playerScopes } from './lib/sample.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => (args.includes(name) ? Number(args[args.indexOf(name) + 1]) : def);
@@ -35,35 +36,24 @@ const save = async () => {
   await writeFile(stateFile, JSON.stringify(state));
 };
 
-const list = (before, count) =>
-  get(`/matches?type=2&season=${SEASON}&count=${count}${before ? `&before=${before}` : ''}`);
-
 // 1. Pick the players (once; kept in the state file so re-runs use the same sample).
-// Without the cached progress (e.g. a fresh GitHub Actions cache), an existing data file
-// can't be resumed. A complete one is left alone; an incomplete one is only replaced once
-// the new sample has more players than it.
+// The published file is protected: once it holds a complete sample of TARGET players there
+// is nothing to do (no requests, no rewrite), and it is never replaced by a sample with
+// fewer players, e.g. a different sample started where the cached progress wasn't available.
 const existing = await readJSON(outFile, null);
-let keepUntil = 0;
-if (!state.chosen && existing) {
-  if (existing.complete) {
-    console.log(`data/player-avgs-s${SEASON}.json is complete (${existing.players.length} players) and there's no saved progress; nothing to do.`);
-    console.log('Delete that file to collect a new sample.');
-    process.exit(0);
-  }
-  keepUntil = existing.players.length;
+if (existing?.complete && existing.players.length >= TARGET) {
+  console.log(`data/player-avgs-s${SEASON}.json already has a complete sample of ${existing.players.length} players; nothing to do.`);
+  console.log('Delete that file to collect a new sample.');
+  process.exit(0);
 }
+const keepUntil = existing?.players.length ?? 0;
 
 if (!state.chosen) {
-  const [latest] = await list(null, 1);
-  let lo = 1, hi = latest.id + 1;
-  while (hi - lo > 2000) {
-    const mid = Math.floor((lo + hi) / 2);
-    (await list(mid, 1)).length ? (hi = mid) : (lo = mid);
-  }
+  const { first, last } = await seasonRange(SEASON);
   const seen = new Map();
   for (let p = 0; p < CANDIDATE_PAGES; p++) {
-    const before = lo + Math.floor(((latest.id - lo) * (p + 0.5)) / CANDIDATE_PAGES);
-    for (const m of await list(before, 100)) {
+    const before = first + Math.floor(((last - first) * (p + 0.5)) / CANDIDATE_PAGES);
+    for (const m of await listMatches(SEASON, before, 100)) {
       for (const u of m.players) if (u.eloRate != null) seen.set(u.uuid, { uuid: u.uuid, elo: u.eloRate });
     }
   }
@@ -77,19 +67,8 @@ if (!state.chosen) {
   console.log(`Picked ${state.chosen.length} of ${pool.length} ranked players found on ${CANDIDATE_PAGES} match pages`);
 }
 
-// Means (ms, rounded) and run counts per split + finish, for one set of runs.
-function scopeStats(runs) {
-  const s = summarize(runs);
-  return {
-    m: SPLITS.map(sp => (s.splits[sp.key].mean == null ? null : Math.round(s.splits[sp.key].mean))),
-    n: SPLITS.map(sp => s.splits[sp.key].n),
-    f: s.finish.mean == null ? null : Math.round(s.finish.mean),
-    fn: s.finish.n,
-  };
-}
-
 async function writeOut(final) {
-  if (state.done.length <= keepUntil) return;
+  if (state.done.length < keepUntil) return;
   await writeFile(outFile, JSON.stringify({
     generatedAt: new Date().toISOString(),
     season: SEASON,
@@ -114,14 +93,8 @@ for (const [i, u] of state.chosen.entries()) {
       try { cache[id] = trimMatch(await get(`/matches/${id}`)); } catch (e) { console.warn(`  skip match ${id}: ${e.message}`); }
     }
     const runs = ids.map(id => cache[id] || shared[id]).filter(Boolean).flatMap(m => runsForPlayer(m, u.uuid));
-    const scopes = { all: scopeStats(runs) };
-    for (const key of ['ow', 'bt']) {
-      for (const type of new Set(runs.map(r => r[key]).filter(Boolean))) {
-        scopes[`${key}:${type}`] = scopeStats(runs.filter(r => r[key] === type));
-      }
-    }
     // Only Elo and averages are kept (no names), indexed by position in the sample.
-    state.done.push({ id: i, elo: u.elo, matches: runs.filter(r => r.attempt === 0).length, scopes });
+    state.done.push({ id: i, elo: u.elo, matches: runs.filter(r => r.attempt === 0).length, scopes: playerScopes(runs) });
   } catch (e) {
     console.warn(`  skip player ${i}: ${e.message}`);
   }

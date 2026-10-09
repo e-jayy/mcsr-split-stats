@@ -8,26 +8,17 @@
 // 600 pages take about 15 minutes.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { get } from './lib/http.js';
+import { listMatches, seasonRange } from './lib/sample.js';
 
 const STEP = 10;              // histogram bucket width in Elo
 const args = process.argv.slice(2);
 const PAGES = args.includes('--pages') ? Number(args[args.indexOf('--pages') + 1]) : 600;
 const seasonArg = args.find((a, i) => /^\d+$/.test(a) && args[i - 1] !== '--pages');
 
-const list = (season, before, count) =>
-  get(`/matches?type=2&count=${count}${season ? `&season=${season}` : ''}${before ? `&before=${before}` : ''}`);
-
-const [latest] = await list(seasonArg, null, 1);
-const season = seasonArg ? Number(seasonArg) : latest.season;
-
-// Smallest match id in the season (binary search on `before`).
-let lo = 1, hi = latest.id + 1;
-while (hi - lo > 2000) {
-  const mid = Math.floor((lo + hi) / 2);
-  (await list(season, mid, 1)).length ? (hi = mid) : (lo = mid);
-}
-console.log(`Season ${season}: match ids ${lo}–${latest.id}, sampling ${PAGES} pages`);
+// Season (default: the current one) and its first / last match ids.
+const season = seasonArg ? Number(seasonArg) : (await listMatches(null, null, 1))[0].season;
+const { first: lo, last } = await seasonRange(season);
+console.log(`Season ${season}: match ids ${lo}–${last}, sampling ${PAGES} pages`);
 
 // Visit pages in van der Corput order (0, 1/2, 1/4, 3/4, ...) so that a run
 // stopped early still covers the whole season evenly.
@@ -68,9 +59,9 @@ async function save() {
 }
 
 for (const p of order) {
-  const before = Math.round(lo + ((latest.id - lo) * (p + 1)) / PAGES) + 1;
+  const before = Math.round(lo + ((last - lo) * (p + 1)) / PAGES) + 1;
   try {
-    for (const m of await list(season, before, 100)) {
+    for (const m of await listMatches(season, before, 100)) {
       matches++;
       for (const u of m.players) {
         if (u.eloRate != null) players.set(u.uuid, { elo: u.eloRate, rank: u.eloRank });

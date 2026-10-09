@@ -61,8 +61,10 @@ const state = {
   open: new Set(),   // expanded split rows
 };
 
+// Fills the run-based footer text. describeComparison() replaces that text (and these
+// spans) once player averages are in use, so this does nothing after that.
 function describeBaseline(b) {
-  if (!b) return;
+  if (!b || !$('baselineSample')) return;
   const date = new Date(b.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   // Newer samples (with match ids) are spread across the season; the original was the most recent matches.
   $('baselineSample').textContent = b.ids
@@ -329,10 +331,13 @@ function compareSwitch(ranks) {
       groups.set(label, [...(groups.get(label) || []), name]);
     }
     const wanted = scopeName({ ow: state.ow, bt: state.bt });
+    // Player averages are stored per single seed type, so a pair can never be matched exactly.
+    const why = byPlayers() && state.ow && state.bt
+      ? "Players' averages are kept per seed type, so with two filters each split is ranked on the type that matters most for it: "
+      : `Not enough ${wanted} in the sample for every split, so: `;
     note = [...groups.keys()].every(k => k === wanted)
       ? `Ranked against ${wanted} only.`
-      : `Not enough ${wanted} in the sample for every split, so: ` +
-        [...groups].map(([label, names]) => `${names.join(', ')} vs. ${label}`).join('; ') + '.';
+      : why + [...groups].map(([label, names]) => `${names.join(', ')} vs. ${label}`).join('; ') + '.';
   }
   return `<div class="compare">
       <span class="compare-label">Compare to</span>
@@ -549,10 +554,12 @@ function renderSplits(sum, ranks) {
   }));
 }
 
-// Percentile of the player's average for split i on one seed type, vs. other players' runs on that type.
-function typeRank(i, value, seed) {
+// Percentile of the player's average for split i on the row's seed type (`own`), also narrowed
+// by the other table's filter (`other`) when the data allows it; otherwise the row's type alone.
+function typeRank(i, value, own, other = {}) {
   if (!baseline || value == null) return null;
-  return percentile(value, comparePop(i, seed).values);
+  const both = comparePop(i, { ...own, ...other });
+  return percentile(value, (both.narrowed ? both : comparePop(i, own)).values);
 }
 const pctBadge = pct => rankHtml(pct == null ? null : { pct, tier: tierFor(pct), label: rankLabel(pct) });
 
@@ -606,7 +613,7 @@ function renderOverworld(runs) {
     { label: 'Enter Nether', get: s => val(s.splits.overworld) },
     { key: 'netherRank', label: 'Rank', render: pctBadge,
       tip: `Your average Enter Nether time vs. ${byPlayers() ? "other players' averages" : "all players' runs"} on this overworld type`,
-      get: (s, t) => typeRank(0, val(s.splits.overworld), { ow: t, bt: state.bt }) },
+      get: (s, t) => typeRank(0, val(s.splits.overworld), { ow: t }, { bt: state.bt }) },
     { label: 'Terrain to Bastion', get: s => val(s.splits.nether) },
     { label: 'Finish', get: s => val(s.finish) },
   ]);
@@ -620,7 +627,7 @@ function renderBastion(runs) {
     { label: 'Bastion split', tip: 'Enter Bastion to Enter Fortress', get: s => val(s.splits.bastion) },
     { key: 'bastionRank', label: 'Rank', render: pctBadge,
       tip: `Your average Bastion split vs. ${byPlayers() ? "other players' averages" : "all players' runs"} on this bastion type`,
-      get: (s, t) => typeRank(2, val(s.splits.bastion), { ow: state.ow, bt: t }) },
+      get: (s, t) => typeRank(2, val(s.splits.bastion), { bt: t }, { ow: state.ow }) },
     { label: 'Fortress split', tip: 'Fortress Enter to Blind', get: s => val(s.splits.fortress) },
     { label: 'Finish', get: s => val(s.finish) },
   ]);

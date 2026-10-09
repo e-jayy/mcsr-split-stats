@@ -8,8 +8,9 @@
 // written every 10 players. Throttled to stay under the API limit (500 requests / 10 min).
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { trimMatch, runsForPlayer, summarize, SPLITS } from '../src/splits.js';
+import { trimMatch, runsForPlayer, SPLITS } from '../src/splits.js';
 import { get } from './lib/http.js';
+import { playerScopes } from './lib/sample.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => (args.includes(name) ? Number(args[args.indexOf(name) + 1]) : def);
@@ -28,28 +29,11 @@ async function saveCache() {
   unsaved = 0;
 }
 
-// Means (ms, rounded) and run counts per split + finish, for one set of runs.
-function scopeStats(runs) {
-  const s = summarize(runs);
-  return {
-    m: SPLITS.map(sp => (s.splits[sp.key].mean == null ? null : Math.round(s.splits[sp.key].mean))),
-    n: SPLITS.map(sp => s.splits[sp.key].n),
-    f: s.finish.mean == null ? null : Math.round(s.finish.mean),
-    fn: s.finish.n,
-  };
-}
-
 function playerEntry(u, ids) {
   const runs = ids.map(id => cache[id]).filter(Boolean).flatMap(m => runsForPlayer(m, u.uuid));
-  const scopes = { all: scopeStats(runs) };
-  for (const key of ['ow', 'bt']) {
-    for (const type of new Set(runs.map(r => r[key]).filter(Boolean))) {
-      scopes[`${key}:${type}`] = scopeStats(runs.filter(r => r[key] === type));
-    }
-  }
   return {
     uuid: u.uuid, nickname: u.nickname, elo: u.eloRate, rank: u.eloRank, country: u.country ?? null,
-    matches: runs.filter(r => r.attempt === 0).length, scopes,
+    matches: runs.filter(r => r.attempt === 0).length, scopes: playerScopes(runs),
   };
 }
 

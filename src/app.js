@@ -637,29 +637,65 @@ function renderBastion(runs) {
 
 const lb = { users: null, shown: [], active: -1, open: false };
 const nameInput = $('name');
+const LB_MAX = 50;   // autocomplete results shown at once
+
+// Every ranked player found by scripts/build-ranks.js (the API has no player search),
+// used for name autocomplete. Loaded the first time the Player box is used.
+let playerIndex = null;
+let playerIndexReady = null;
+function loadPlayerIndex() {
+  playerIndexReady ??= fetch(`data/player-index-s${SEASON}.json`)
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => {
+      playerIndex = d ? d.players.map(([nickname, eloRate, eloRank]) => ({ nickname, eloRate, eloRank, key: nickname.toLowerCase() })) : [];
+    })
+    .catch(() => { playerIndex = []; });
+  return playerIndexReady;
+}
 
 function lbRow(u, i) {
   const d = divisionFor(u.eloRate);
   const tier = d && TIERS.find(t => t.key === d.tier);
   return `<li role="option" id="lb-${i}" data-name="${esc(u.nickname)}" aria-selected="false">
-    <span class="lb-rank">${u.eloRank}</span>
-    <span class="lb-name"><img src="https://mc-heads.net/avatar/${u.uuid}/20" alt="" loading="lazy">${esc(u.nickname)}</span>
+    <span class="lb-rank">${u.eloRank ?? ''}</span>
+    <span class="lb-name"><img src="https://mc-heads.net/avatar/${encodeURIComponent(u.uuid || u.nickname)}/20" alt="" loading="lazy">${esc(u.nickname)}</span>
     <span class="lb-elo"${tier ? ` style="color:${tier.color}" title="${d.name}"` : ''}>${d ? tierIcon(d.tier, 14) : ''}${u.eloRate}</span>
   </li>`;
 }
 
+// Players whose name contains q: exact match first, then names starting with q, then the
+// rest; strongest first within each. Top-150 entries (live leaderboard data) win over the index.
+function lbSearch(q) {
+  const byName = new Map();
+  for (const u of playerIndex || []) if (u.key.includes(q)) byName.set(u.key, u);
+  for (const u of lb.users || []) {
+    const key = u.nickname.toLowerCase();
+    if (key.includes(q)) byName.set(key, { ...u, key });
+  }
+  const tierOf = u => (u.key === q ? 0 : u.key.startsWith(q) ? 1 : 2);
+  return [...byName.values()].sort((a, b) => tierOf(a) - tierOf(b) || b.eloRate - a.eloRate);
+}
+
 function lbRender() {
   const list = $('lbList');
-  if (!lb.users) {
+  const typed = nameInput.value.trim();
+  const q = typed.toLowerCase();
+  if (!q && !lb.users) {
     list.innerHTML = `<li class="lb-msg">${lb.error ? 'Couldn’t load the leaderboard. You can still type a name and press Search.' : 'Loading the top 150…'}</li>`;
     return;
   }
-  const q = nameInput.value.trim().toLowerCase();
-  lb.shown = q ? lb.users.filter(u => u.nickname.toLowerCase().includes(q)) : lb.users;
+  if (q && !playerIndex && !lb.users) {
+    list.innerHTML = '<li class="lb-msg">Loading the player list…</li>';
+    return;
+  }
+  const matches = q ? lbSearch(q) : lb.users;
+  lb.shown = q ? matches.slice(0, LB_MAX) : matches;    // the cap only applies to search results
   lb.active = Math.min(lb.active, lb.shown.length - 1);
   list.innerHTML = lb.shown.length
-    ? lb.shown.map(lbRow).join('')
-    : `<li class="lb-msg">No top-150 player matches “${esc(nameInput.value.trim())}”. Press Search to look them up anyway.</li>`;
+    ? lb.shown.map(lbRow).join('') +
+      (matches.length > LB_MAX ? `<li class="lb-msg">Showing ${LB_MAX} of ${matches.length.toLocaleString()} players. Keep typing to narrow it down.</li>` : '')
+    : `<li class="lb-msg">No ranked player found matching “${esc(typed)}”. Press Search to look them up anyway.</li>`;
+  $('lbHeadLabel').textContent = q ? 'Players' : 'Top 150';
   lbHighlight();
 }
 
@@ -679,6 +715,7 @@ async function lbOpen() {
   $('lbPop').hidden = false;
   nameInput.setAttribute('aria-expanded', 'true');
   lbRender();
+  if (!playerIndex) loadPlayerIndex().then(() => { if (lb.open) lbRender(); });
   if (!lb.users) {
     try { lb.users = await getLeaderboard(SEASON); lb.error = false; } catch { lb.error = true; }
     if (lb.open) lbRender();

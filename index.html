@@ -23,11 +23,11 @@
           <label for="name">Player</label>
           <!-- Drop-down of the Season 12 top 150 (filled by src/app.js). -->
           <div class="combo">
-            <input id="name" name="name" placeholder="Nickname or UUID, or pick from the top 150" required
+            <input id="name" name="name" placeholder="Start typing a player's name, or pick from the top 150" required
               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="lbList">
             <div class="lb-pop" id="lbPop" hidden>
-              <div class="lb-head"><span>#</span><span>Player</span><span>Elo</span></div>
-              <ul class="lb-list" id="lbList" role="listbox" aria-label="Top 150 players"></ul>
+              <div class="lb-head"><span>#</span><span id="lbHeadLabel">Top 150</span><span>Elo</span></div>
+              <ul class="lb-list" id="lbList" role="listbox" aria-label="Players"></ul>
             </div>
           </div>
         </div>

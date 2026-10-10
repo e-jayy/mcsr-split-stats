@@ -117,7 +117,7 @@ async function search(name) {
     await Promise.all([baselineReady, playerAvgsReady]);
     // Remember the mode used for this search (the dropdown can change before the next search).
     const modeLabel = $('type').selectedOptions[0].textContent;
-    Object.assign(state, { user, matches, modeLabel, ow: null, bt: null, open: new Set() });
+    Object.assign(state, { user, matches, modeLabel, ow: null, bt: null, open: new Set(), distSel: undefined });
     history.replaceState(null, '', `?player=${encodeURIComponent(user.nickname)}`);
     setStatus(null);
     render();
@@ -217,22 +217,51 @@ async function renderRankDist() {
     return p >= 1 ? `${Math.round(p)}%` : p > 0 ? `${p.toFixed(1)}%` : '0%';
   };
 
+  // Selected division (index) or whole rank (tier key); defaults to the player's own division.
+  // state.distSel: undefined = not chosen yet, false = cleared, else { div } or { tier }.
+  const sel = state.distSel ?? (mine ? { div: DIVISIONS.indexOf(mine) } : null);
+  const selDivs = !sel ? [] : sel.tier ? DIVISIONS.flatMap((d, i) => (d.tier === sel.tier ? [i] : [])) : [sel.div];
+
   const bars = DIVISIONS.map((d, i) => {
     const tier = TIERS.find(t => t.key === d.tier);
     const you = d === mine;
     const range = d.max === Infinity ? `${d.min}+` : `${d.min}–${d.max}`;
-    return `<div class="dist-col${you ? ' you' : ''}" title="${d.name} (${range} Elo): ${counts[i].toLocaleString()} players · ${pctOf(counts[i])}">
+    return `<button type="button" class="dist-col${you ? ' you' : ''}${selDivs.includes(i) ? ' sel' : ''}" data-div="${i}"
+      aria-pressed="${selDivs.includes(i)}" title="${d.name} (${range} Elo): ${counts[i].toLocaleString()} players · ${pctOf(counts[i])}">
       ${you ? '<span class="you-tag">You</span>' : ''}
       <span class="dist-pct">${pctOf(counts[i])}</span>
-      <div class="dist-bar" style="height:${peak ? (counts[i] / peak) * 100 : 0}%;background:${tier.color}"></div>
-    </div>`;
+      <span class="dist-bar" style="height:${peak ? (counts[i] / peak) * 100 : 0}%;background:${tier.color}"></span>
+    </button>`;
   }).join('');
 
   const numerals = DIVISIONS.map(d => `<span>${d.name.split(' ')[1] || ''}</span>`).join('');
   const groups = TIERS.slice().reverse().map(t => {
     const span = DIVISIONS.filter(d => d.tier === t.key).length;
-    return `<span class="dist-tier" style="grid-column:span ${span};color:${t.color}">${tierIcon(t.key, 16)}<b>${t.name}</b></span>`;
+    const on = sel?.tier === t.key;
+    return `<button type="button" class="dist-tier${on ? ' sel' : ''}" data-tier="${t.key}" aria-pressed="${on}"
+      style="grid-column:span ${span};color:${t.color}" title="${t.name}: see how it compares">${tierIcon(t.key, 16)}<b>${t.name}</b></button>`;
   }).join('');
+
+  // What reaching the selected division / rank means: players at or above its lowest Elo.
+  let info = '<p class="dist-info-hint">Click a rank or division to see how it compares to all players.</p>';
+  if (selDivs.length) {
+    const first = DIVISIONS[selDivs[0]], last = DIVISIONS[selDivs[selDivs.length - 1]];
+    const tier = TIERS.find(t => t.key === first.tier);
+    const name = sel.tier ? tier.name : first.name;
+    const inIt = selDivs.reduce((s, i) => s + counts[i], 0);
+    const below = counts.slice(0, selDivs[0]).reduce((s, c) => s + c, 0);
+    // One decimal below 10% and just under 100% (so 99.6% never rounds up to "100%").
+    const pct = n => {
+      const p = (n / total) * 100;
+      return p >= 99.5 && p < 100 ? `${Math.min(p, 99.9).toFixed(1)}%` : p >= 10 ? `${Math.round(p)}%` : `${p.toFixed(1)}%`;
+    };
+    const range = last.max === Infinity ? `${first.min}+ Elo` : `${first.min}–${last.max} Elo`;
+    const where = below === 0
+      ? `${name} is where every ranked player starts.`
+      : `<b>Top ${pct(total - below)}</b> of ranked players: reaching ${name} puts you above <b>${pct(below)}</b> of players.`;
+    info = `<p class="dist-info-head" style="color:${tier.color}">${tierIcon(first.tier, 16)}${name} <span>· ${range}</span></p>
+      <p class="dist-info-body">${where} ${inIt.toLocaleString()} players (${pct(inIt)}) are in ${name}.</p>`;
+  }
 
   let summary = `${esc(u.nickname)} hasn't finished placement matches yet.`;
   if (mine) {
@@ -254,8 +283,20 @@ async function renderRankDist() {
       <div class="dist-numerals">${numerals}</div>
       <div class="dist-tiers">${groups}</div>
     </div>
+    <div class="dist-info" aria-live="polite">${info}</div>
     <p class="perf-note"><a href="#how-dist">How this is calculated</a></p>`;
 }
+
+// Clicking a division bar or rank name selects it (clicking it again clears the selection).
+$('rankDist').addEventListener('click', e => {
+  const b = e.target.closest('[data-div], [data-tier]');
+  if (!b) return;
+  const pick = b.dataset.tier ? { tier: b.dataset.tier } : { div: Number(b.dataset.div) };
+  const cur = state.distSel ?? (b.closest('.dist-col.sel, .dist-tier.sel') ? pick : null);
+  const same = cur && cur.tier === pick.tier && cur.div === pick.div;
+  state.distSel = same ? false : pick;
+  renderRankDist();
+});
 
 function renderPlayer(sum) {
   const u = state.user;

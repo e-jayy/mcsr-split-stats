@@ -423,6 +423,15 @@ const rankHtml = r => (r
   ? `<span class="rank" style="color:${r.tier.color}">${tierIcon(r.tier.key)}${r.label}</span>`
   : '<span class="muted">—</span>');
 
+// How many of the player's runs the panel is based on (after seed-type filters).
+function runsNote(sum) {
+  const scope = [state.ow && prettyType(state.ow), state.bt && prettyType(state.bt)].filter(Boolean).join(' + ');
+  const extra = sum.runs - sum.matches;   // attempts after a reset, when those are included
+  return `Based on <b>${sum.runs}</b> run${sum.runs === 1 ? '' : 's'}${scope ? ` on ${scope}` : ''}` +
+    `${extra > 0 ? ` (${extra} after a reset)` : ''}. ` +
+    'Later splits only count runs that reached them; hover a split for its count.';
+}
+
 function renderPerformance(sum, ranks) {
   const card = $('perf');
   card.hidden = !ranks;
@@ -447,7 +456,8 @@ function renderPerformance(sum, ranks) {
     const [x, y] = pt(i, R + 9);
     const r = ranks[s.key];
     const side = x < cx - 2 ? 'left' : x > cx + 2 ? 'right' : 'mid';
-    return `<div class="axis ${side}" style="left:${(x / W) * 100}%;top:${(y / H) * 100}%">
+    const n = sum.splits[s.key].n;
+    return `<div class="axis ${side}" style="left:${(x / W) * 100}%;top:${(y / H) * 100}%" title="${s.name}: ${n} run${n === 1 ? '' : 's'}">
       <div class="axis-name">${s.name.replace(' travel', '')}</div>
       <div class="axis-val" style="color:${r ? r.tier.color : '#888'}">${r ? `${tierIcon(r.tier.key, 14)}<span>${fmt(val(sum.splits[s.key]), { tenths: false })}</span><span class="sep"> / </span><span>${r.label}</span>` : 'no data'}</div>
     </div>`;
@@ -470,6 +480,7 @@ function renderPerformance(sum, ranks) {
     ${avgTier ? `<p class="perf-avg" title="${esc(avgTip)}" tabindex="0">Performance average
       <span style="color:${avgTier.color}">${tierIcon(avgTier.key, 16)}<b>${rankLabel(avgPct)}</b> · ${avgTier.name}</span><span class="info-dot" aria-hidden="true">i</span></p>` : ''}
     ${fin ? `<p class="perf-overall">Finish <b>${fmt(val(sum.finish), { tenths: false })}</b> <span style="color:${fin.tier.color}">${tierIcon(fin.tier.key, 14)}${fin.label} · ${fin.tier.name}</span></p>` : ''}
+    <p class="perf-runs">${runsNote(sum)}</p>
     <div class="radar">
       <svg viewBox="0 0 ${W} ${H}" aria-hidden="true">
         <polygon points="${poly(R)}" class="ring outer"/>${rings}${spokes}

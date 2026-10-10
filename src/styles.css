@@ -273,6 +273,9 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .perf-title { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 32px; line-height: 1; }
 .perf-overall { text-align: center; margin: 12px 0 0; color: var(--muted); }
 .perf-overall b { color: #fff; }
+.perf-runs { text-align: center; margin: 6px auto 0; max-width: 640px; color: var(--muted); text-shadow: none; }
+.perf-runs b { color: var(--zinc-200); font-weight: 400; }
+.radar .axis[title] { cursor: help; }
 /* Performance average (with an "i" tooltip explaining it). */
 .perf-avg { text-align: center; margin: 12px 0 0; font-size: 24px; color: var(--zinc-200); cursor: help; }
 .perf-avg b { font-weight: 400; }

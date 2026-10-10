@@ -454,8 +454,14 @@ function renderPerformance(sum, ranks) {
   }).join('');
 
   const fin = ranks.finish;
+  // Title icons show the player's overall tier: their Finish rank, or, without any finished
+  // runs, the average of their split ranks.
+  const splitPcts = SPLITS.map(s => ranks[s.key]?.pct).filter(p => p != null);
+  const overall = fin ? fin.tier
+    : splitPcts.length ? tierFor(splitPcts.reduce((a, b) => a + b, 0) / splitPcts.length) : null;
+  const titleIcon = tierIcon(overall ? overall.key : 'unrated', 32);
   card.innerHTML = `
-    <h2 class="perf-title">${tierIcon('diamond', 32)}<span>Split Performance</span>${tierIcon('diamond', 32)}</h2>
+    <h2 class="perf-title" title="${overall ? `Overall: ${overall.name}` : 'No ranked splits yet'}">${titleIcon}<span>Split Performance</span>${titleIcon}</h2>
     <div class="filter-line center" data-filters></div>
     ${compareSwitch(ranks)}
     ${fin ? `<p class="perf-overall">Finish <b>${fmt(val(sum.finish), { tenths: false })}</b> <span style="color:${fin.tier.color}">${tierIcon(fin.tier.key, 14)}${fin.label} · ${fin.tier.name}</span></p>` : ''}
@@ -467,8 +473,8 @@ function renderPerformance(sum, ranks) {
       ${labels}
     </div>
     <ul class="perf-list">${SPLITS.map(s => { const r = ranks[s.key]; return `<li><span>${s.name}</span><span>${fmt(val(sum.splits[s.key]), { tenths: false })}</span><span style="color:${r ? r.tier.color : '#888'}">${r ? tierIcon(r.tier.key, 16) + r.label : '—'}</span></li>`; }).join('')}</ul>
-    <ul class="tier-legend">${TIERS.map((t, i) => `<li style="color:${t.color}">${tierIcon(t.key, 16)}${t.name}
-      <span>${i < 4 ? `Top ${t.max}%` : `Bottom ${100 - TIERS[i - 1].max}%`}</span></li>`).join('')}</ul>
+    <ul class="tier-legend">${TIERS.map((t, i) => `<li style="color:${t.color}">${tierIcon(t.key, 16)}${t.name}<span>${
+      i < 4 ? `Top ${t.max}%` : `Bottom ${100 - TIERS[i - 1].max}%`}</span></li>`).join('')}</ul>
     <p class="perf-note"><a href="#how-ranks">How % is calculated</a></p>`;
 }
 

@@ -292,9 +292,16 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .axis-val { font-size: 16px; }
 .tier-legend {
   list-style: none; padding: 0; margin: 18px 0 0;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font-size: 16px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; font-size: 16px;
 }
-.tier-legend span { color: var(--muted); margin-left: 4px; }
+.tier-legend li { white-space: nowrap; }
+.tier-legend .px-icon { margin-right: 4px; }
+.tier-legend span { color: var(--muted); margin-left: 6px; }
+/* PC (panel at full width): all six tiers on one line. The pixel font's 2px letter gap is
+   trimmed to 1px here so they fit; it stays crisp because the gap is a whole pixel. */
+@media (min-width: 1112px) {
+  .tier-legend { flex-wrap: nowrap; justify-content: space-between; gap: 10px; letter-spacing: -1px; }
+}
 .perf-note { text-align: center; font-size: 16px; margin: 12px 0 0; text-shadow: none; }
 .perf-note a { color: var(--muted); }
 .perf-note a:hover { color: var(--zinc-200); }

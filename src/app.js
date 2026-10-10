@@ -203,6 +203,14 @@ async function renderRankDist() {
   card.hidden = !data;
   if (!data) return;
 
+  // Start screen (no player): below the Top players list. With a player loaded: in their
+  // results, above the notes.
+  if (state.user) {
+    if (card.parentElement !== $('results')) $('results').insertBefore(card, $('results').querySelector('footer.notes'));
+  } else if (card.parentElement !== $('rankDistHome')) {
+    $('rankDistHome').appendChild(card);
+  }
+
   const counts = divisionCounts(data);
   const total = counts.reduce((s, c) => s + c, 0);
   const date = new Date(data.generatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -211,7 +219,7 @@ async function renderRankDist() {
     (data.highestRank ? `; the leaderboard goes down to about #${data.highestRank.toLocaleString()}` : '');
   const peak = Math.max(...counts);
   const u = state.user;
-  const mine = u.eloRate != null ? divisionFor(u.eloRate) : null;
+  const mine = u?.eloRate != null ? divisionFor(u.eloRate) : null;
   const pctOf = c => {
     const p = (c / total) * 100;
     return p >= 1 ? `${Math.round(p)}%` : p > 0 ? `${p.toFixed(1)}%` : '0%';
@@ -263,7 +271,7 @@ async function renderRankDist() {
       <p class="dist-info-body">${where} ${inIt.toLocaleString()} players (${pct(inIt)}) are in ${name}.</p>`;
   }
 
-  let summary = `${esc(u.nickname)} hasn't finished placement matches yet.`;
+  let summary = u ? `${esc(u.nickname)} hasn't finished placement matches yet.` : '';
   if (mine) {
     const pct = eloPercentile(u.eloRate, data);
     const tier = TIERS.find(t => t.key === mine.tier);
@@ -277,14 +285,14 @@ async function renderRankDist() {
     <p class="dist-caveat">Estimate: this is based on a sample of ${total.toLocaleString()}${data.highestRank > total
       ? ` of roughly ${data.highestRank.toLocaleString()}` : ''} ranked players, not every player.
       Players with very few games are the most likely to be missing.</p>
-    <p class="dist-summary">${summary}</p>
+    ${summary ? `<p class="dist-summary">${summary}</p>` : ''}
     <div class="dist">
       <div class="dist-bars">${bars}</div>
       <div class="dist-numerals">${numerals}</div>
       <div class="dist-tiers">${groups}</div>
     </div>
     <div class="dist-info" aria-live="polite">${info}</div>
-    <p class="perf-note"><a href="#how-dist">How this is calculated</a></p>`;
+    ${u ? '<p class="perf-note"><a href="#how-dist">How this is calculated</a></p>' : ''}`;
 }
 
 // Clicking a division bar or rank name selects it (clicking it again clears the selection).
@@ -831,10 +839,25 @@ const tpReady = fetch(`data/players-s${SEASON}.json`)
   .then(r => (r.ok ? r.json() : null))
   .then(async d => {
     tp.data = d;
+    // The live top 150 decides who is listed; the data file covers a wider pool (e.g. top 300).
+    tp.live = await getLeaderboard(SEASON).catch(() => null);
     await Promise.all([baselineReady, playerAvgsReady]);
     if (d) initTopPlayers();
   })
   .catch(() => {});
+
+const TP_SHOWN = 150;
+
+// Players to list: whoever is in the live top 150 and has collected data, with their live
+// Elo and leaderboard position. Without the live leaderboard, the file's 150 best-ranked.
+function tpPlayers() {
+  if (!tp.live) return tp.data.players.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9)).slice(0, TP_SHOWN);
+  const stored = new Map(tp.data.players.map(p => [p.uuid, p]));
+  return tp.live.slice(0, TP_SHOWN).flatMap(u => {
+    const p = stored.get(u.uuid);
+    return p ? [{ ...p, nickname: u.nickname, elo: u.eloRate, rank: u.eloRank }] : [];
+  });
+}
 
 function initTopPlayers() {
   $('topPlayers').hidden = false;
@@ -871,7 +894,7 @@ function tpRows() {
   const { pop, used } = tpPopulation(i);
   const key = seedKey({ ow: tp.ow, bt: tp.bt });
   const rows = [];
-  for (const p of tp.data.players) {
+  for (const p of tpPlayers()) {
     const sc = p.scopes[key];
     if (!sc) continue;
     const avg = i === 'finish' ? sc.f : sc.m[i];
@@ -890,7 +913,11 @@ function renderTopPlayers() {
 
   // When the snapshot was taken, so newer games missing from the list don't look like a bug.
   const when = new Date(tp.data.generatedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  $('tpNote').textContent = `Season ${tp.data.season} Elo top 150 · ${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of 150 so far) · `}` +
+  const pool = tp.data.pool ?? TP_SHOWN;
+  const covered = tpPlayers().length;
+  $('tpNote').textContent = `Season ${tp.data.season} · ${tp.live ? 'live' : ''} Elo top ${TP_SHOWN}` +
+    `${tp.live && covered < Math.min(TP_SHOWN, tp.live.length) ? ` (${covered} with data)` : ''} · ` +
+    `${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of ${pool} so far) · `}` +
     `averages from each player's last ${tp.data.perPlayer} ranked matches, as of ${when}`;
 
   const cols = [
@@ -996,3 +1023,4 @@ countList.addEventListener('mousedown', e => {
 // Support shareable links: ?player=Name
 const initial = new URLSearchParams(location.search).get('player');
 if (initial) { $('name').value = initial; search(initial); }
+else renderRankDist();   // start screen: the chart goes below the Top players list

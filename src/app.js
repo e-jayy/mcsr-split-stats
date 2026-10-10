@@ -192,7 +192,7 @@ function render() {
   renderBastion(filterRuns(runs, { bt: null }));
   renderFilters();
   renderRankDist();
-  renderTopPlayers();   // highlights the searched player if they're in the top 150
+  renderTopPlayers();   // highlights the searched player if they're in the list
 }
 
 // ---------- rank distribution ----------
@@ -852,7 +852,7 @@ $('lbList').addEventListener('mousedown', e => {
 });
 $('search').addEventListener('submit', lbClose);
 
-// ---------- Top players (Elo top 150, data/players-s12.json from scripts/build-players.js) ----------
+// ---------- Top players (fastest 150 of the Elo top 300, data/players-s12.json from scripts/build-players.js) ----------
 
 const TP_MIN_RUNS = 3;   // a player needs this many runs of the split (on the seed types) to be listed
 const tp = { data: null, split: 'overworld', ow: '', bt: '' };
@@ -861,7 +861,7 @@ const tpReady = fetch(`data/players-s${SEASON}.json`)
   .then(r => (r.ok ? r.json() : null))
   .then(async d => {
     tp.data = d;
-    // The live top 150 decides who is listed; the data file covers a wider pool (e.g. top 300).
+    // Live Elo and leaderboard positions for players currently in the top 150.
     tp.live = await getLeaderboard(SEASON).catch(() => null);
     await Promise.all([baselineReady, playerAvgsReady]);
     if (d) initTopPlayers();
@@ -870,14 +870,14 @@ const tpReady = fetch(`data/players-s${SEASON}.json`)
 
 const TP_SHOWN = 150;
 
-// Players to list: whoever is in the live top 150 and has collected data, with their live
-// Elo and leaderboard position. Without the live leaderboard, the file's 150 best-ranked.
+// Every player in the data file (the Elo top 300 when it was collected), with live Elo and
+// leaderboard position for those in the live top 150. The table lists the TP_SHOWN fastest
+// of them for the chosen split and seed types, whatever their Elo.
 function tpPlayers() {
-  if (!tp.live) return tp.data.players.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9)).slice(0, TP_SHOWN);
-  const stored = new Map(tp.data.players.map(p => [p.uuid, p]));
-  return tp.live.slice(0, TP_SHOWN).flatMap(u => {
-    const p = stored.get(u.uuid);
-    return p ? [{ ...p, nickname: u.nickname, elo: u.eloRate, rank: u.eloRank }] : [];
+  const live = new Map((tp.live ?? []).map(u => [u.uuid, u]));
+  return tp.data.players.map(p => {
+    const u = live.get(p.uuid);
+    return u ? { ...p, nickname: u.nickname, elo: u.eloRate, rank: u.eloRank } : p;
   });
 }
 
@@ -924,21 +924,22 @@ function tpRows() {
     if (avg == null || runs < TP_MIN_RUNS) continue;
     rows.push({ p, avg, runs, pct: pop ? percentile(avg, pop.values) : null });
   }
-  return { rows, used, sample: pop?.values.length ?? 0 };
+  const eligible = rows.length;
+  rows.sort((a, b) => a.avg - b.avg).splice(TP_SHOWN);
+  return { rows, eligible, used, sample: pop?.values.length ?? 0 };
 }
 
 function renderTopPlayers() {
   if (!tp.data) return;
-  const { rows, used, sample } = tpRows();
+  const { rows, eligible, used, sample } = tpRows();
   const splitName = tp.split === 'finish' ? 'Finish time' : SPLITS.find(s => s.key === tp.split).name;
   const seedName = [tp.ow && prettyType(tp.ow), tp.bt && prettyType(tp.bt)].filter(Boolean).join(' + ');
 
   // When the snapshot was taken, so newer games missing from the list don't look like a bug.
   const when = new Date(tp.data.generatedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const pool = tp.data.pool ?? TP_SHOWN;
-  const covered = tpPlayers().length;
-  $('tpNote').textContent = `Season ${tp.data.season} · ${tp.live ? 'live' : ''} Elo top ${TP_SHOWN}` +
-    `${tp.live && covered < Math.min(TP_SHOWN, tp.live.length) ? ` (${covered} with data)` : ''} · ` +
+  const pool = tp.data.pool ?? tp.data.players.length;
+  $('tpNote').textContent = `Season ${tp.data.season} · fastest ${Math.min(TP_SHOWN, eligible)} of the Elo top ${pool}` +
+    `${seedName ? ` on ${seedName}` : ''} · ` +
     `${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of ${pool} so far) · `}` +
     `averages from each player's last ${tp.data.perPlayer} ranked matches, as of ${when}`;
 
@@ -959,11 +960,11 @@ function renderTopPlayers() {
   let html = sortHeader('top', cols) + '<tbody>';
   sorted.forEach((r, n) => {
     html += `<tr data-name="${esc(r.p.nickname)}" class="${r.p.uuid === me ? 'active' : ''}" title="Load ${esc(r.p.nickname)}'s stats">
-      <td><span class="tp-pos">${n + 1}</span><img class="tp-head" src="https://mc-heads.net/avatar/${r.p.uuid}/20" alt="" loading="lazy">${esc(r.p.nickname)}<span class="tp-lb">#${r.p.rank}</span></td>
+      <td><span class="tp-pos">${n + 1}</span><img class="tp-head" src="https://mc-heads.net/avatar/${r.p.uuid}/20" alt="" loading="lazy">${esc(r.p.nickname)}${r.p.rank ? `<span class="tp-lb">#${r.p.rank}</span>` : ''}</td>
       <td>${r.p.elo}</td><td><b>${fmt(r.avg)}</b></td><td class="n">${r.runs}</td><td>${pctBadge(r.pct)}</td></tr>`;
   });
   if (!sorted.length) {
-    html += `<tr class="tp-empty"><td colspan="5">No top-150 players have ${TP_MIN_RUNS}+ ${tp.split === 'finish' ? 'finished runs' : 'runs of this split'}` +
+    html += `<tr class="tp-empty"><td colspan="5">No players have ${TP_MIN_RUNS}+ ${tp.split === 'finish' ? 'finished runs' : 'runs of this split'}` +
       `${seedName ? ` on ${seedName}` : ''} in their last ${tp.data.perPlayer} matches.</td></tr>`;
   }
   const table = $('tpTable');

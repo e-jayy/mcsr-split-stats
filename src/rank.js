@@ -1,13 +1,16 @@
 // Percentile ranking of a player's splits against the baseline sample,
 // mapped to Minecraft material tiers.
 
+import { RANK_ICONS } from './rank-icons.js';
+
+// Text colours are the ones MCSR Ranked uses for each rank name in game.
 export const TIERS = [
-  { key: 'netherite', name: 'Netherite', max: 5,   color: '#c4b2b5', icon: 'ingot' },
-  { key: 'diamond',   name: 'Diamond',   max: 20,  color: '#5ef0dd', icon: 'gem' },
-  { key: 'emerald',   name: 'Emerald',   max: 40,  color: '#3ee07a', icon: 'gem' },
-  { key: 'gold',      name: 'Gold',      max: 60,  color: '#fcdb3f', icon: 'ingot' },
-  { key: 'iron',      name: 'Iron',      max: 80,  color: '#d8d8d8', icon: 'ingot' },
-  { key: 'coal',      name: 'Coal',      max: 100, color: '#8d8d8d', icon: 'lump' },
+  { key: 'netherite', name: 'Netherite', max: 5,   color: '#9729be' },
+  { key: 'diamond',   name: 'Diamond',   max: 20,  color: '#55ffff' },
+  { key: 'emerald',   name: 'Emerald',   max: 40,  color: '#55ff55' },
+  { key: 'gold',      name: 'Gold',      max: 60,  color: '#ffaa00' },
+  { key: 'iron',      name: 'Iron',      max: 80,  color: '#ffffff' },
+  { key: 'coal',      name: 'Coal',      max: 100, color: '#aaaaaa' },
 ];
 
 export const tierFor = pct => TIERS.find(t => pct <= t.max) ?? TIERS[TIERS.length - 1];
@@ -59,57 +62,33 @@ export function playerPopulation(data, i, seed = {}, minRuns = 3) {
   return narrowed.length >= MIN_SAMPLE ? { values: narrowed, narrowed: true } : { values: all, narrowed: false };
 }
 
-// ---------- pixel-art icons ----------
-// O outline, L light, M mid, D dark, . transparent
+// ---------- rank icons ----------
+// Pixel art from MCSR Ranked's Ranked Information screen (src/rank-icons.js). Every icon is
+// drawn centred in the same 15x15 box so they line up and keep their in-game relative sizes.
 
-const SHAPES = {
-  gem: [
-    '..OOOO..',
-    '.OLLLMO.',
-    'OLLMMMMO',
-    'OLMMMMDO',
-    '.OMMMDO.',
-    '..OMDO..',
-    '...OO...',
-    '........',
-  ],
-  ingot: [
-    '........',
-    '...OOOOO',
-    '..OLLLLO',
-    '.OLMMMDO',
-    'OMMMMDO.',
-    'ODDDDO..',
-    'OOOOO...',
-    '........',
-  ],
-  lump: [
-    '........',
-    '..OOOO..',
-    '.OMLMMO.',
-    'OMLMMDMO',
-    'OMMMDMMO',
-    '.OMDMMO.',
-    '..OOOO..',
-    '........',
-  ],
-};
+const ICON_BOX = 15;
+const iconBodies = {};
 
-const PALETTES = {
-  netherite: { O: '#120e0f', L: '#7a6e70', M: '#4d4344', D: '#2c2425' },
-  diamond:   { O: '#0c3b37', L: '#e3fffa', M: '#4aedd9', D: '#1c9e90' },
-  emerald:   { O: '#08361a', L: '#c4ffd6', M: '#17dd62', D: '#0a8a3a' },
-  gold:      { O: '#5a3a00', L: '#fffbc2', M: '#fcdb3f', D: '#c2860f' },
-  iron:      { O: '#3a3a3a', L: '#ffffff', M: '#d8d8d8', D: '#969696' },
-  coal:      { O: '#050505', L: '#6e6e6e', M: '#2e2e2e', D: '#181818' },
-};
-
-export function tierIcon(tierKey, size = 16) {
-  const tier = TIERS.find(t => t.key === tierKey);
-  const pal = PALETTES[tierKey];
+function iconBody(key) {
+  if (iconBodies[key]) return iconBodies[key];
+  const { palette, rows } = RANK_ICONS[key];
+  const dx = (ICON_BOX - rows[0].length) / 2, dy = (ICON_BOX - rows.length) / 2;
   let rects = '';
-  SHAPES[tier.icon].forEach((row, y) => [...row].forEach((c, x) => {
-    if (c !== '.') rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${pal[c]}"/>`;
-  }));
-  return `<svg class="px-icon" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+  rows.forEach((row, y) => {
+    // One rect per horizontal run of the same colour.
+    for (let x = 0; x < row.length;) {
+      const c = row[x];
+      let end = x + 1;
+      while (end < row.length && row[end] === c) end++;
+      if (c !== '.') rects += `<rect x="${x + dx}" y="${y + dy}" width="${end - x}" height="1" fill="${palette[parseInt(c, 36)]}"/>`;
+      x = end;
+    }
+  });
+  return (iconBodies[key] = rects);
+}
+
+// tierKey: coal, iron, gold, emerald, diamond, netherite (or 'unrated').
+export function tierIcon(tierKey, size = 16) {
+  return `<svg class="px-icon" width="${size}" height="${size}" viewBox="0 0 ${ICON_BOX} ${ICON_BOX}" ` +
+    `shape-rendering="crispEdges" aria-hidden="true">${iconBody(tierKey)}</svg>`;
 }

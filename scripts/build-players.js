@@ -33,7 +33,7 @@ function playerEntry(u, ids) {
   const runs = ids.map(id => cache[id]).filter(Boolean).flatMap(m => runsForPlayer(m, u.uuid));
   return {
     uuid: u.uuid, nickname: u.nickname, elo: u.eloRate, rank: u.eloRank, country: u.country ?? null,
-    matches: runs.filter(r => r.attempt === 0).length, scopes: playerScopes(runs),
+    matches: runs.filter(r => r.attempt === 0).length, scopes: playerScopes(runs, { pairs: true }),
   };
 }
 

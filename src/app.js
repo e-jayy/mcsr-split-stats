@@ -3,7 +3,7 @@ import {
   SPLITS, MILESTONE_NAMES, OVERWORLD_TYPES, BASTION_TYPES,
   runsForPlayer, summarize, groupBy, prettyType, fmt, winRate,
 } from './splits.js';
-import { TIERS, tierFor, percentile, rankLabel, population, playerPopulation, tierIcon } from './rank.js';
+import { TIERS, tierFor, percentile, rankLabel, population, playerPopulation, seedKey, tierIcon } from './rank.js';
 import { DIVISIONS, divisionFor, divisionCounts, eloPercentile } from './elo.js';
 
 const $ = id => document.getElementById(id);
@@ -783,16 +783,8 @@ $('search').addEventListener('submit', lbClose);
 
 // ---------- Top players (Elo top 150, data/players-s12.json from scripts/build-players.js) ----------
 
-const TP_MIN_RUNS = 3;   // a player needs this many runs of the split (on the seed type) to be listed
-const TP_TIERS = [
-  { key: 'all', label: 'All', max: 100 },
-  { key: 'top1', label: 'Top 1%', max: 1 },
-  { key: 'netherite', label: 'Top 5%', max: 5, tier: 'netherite' },
-  { key: 'diamond', label: 'Top 20%', max: 20, tier: 'diamond' },
-  { key: 'emerald', label: 'Top 40%', max: 40, tier: 'emerald' },
-  { key: 'gold', label: 'Top 60%', max: 60, tier: 'gold' },
-];
-const tp = { data: null, split: 'overworld', seed: '', tier: 'all' };
+const TP_MIN_RUNS = 3;   // a player needs this many runs of the split (on the seed types) to be listed
+const tp = { data: null, split: 'overworld', ow: '', bt: '' };
 
 const tpReady = fetch(`data/players-s${SEASON}.json`)
   .then(r => (r.ok ? r.json() : null))
@@ -807,51 +799,59 @@ function initTopPlayers() {
   $('topPlayers').hidden = false;
   $('tpSplit').innerHTML = SPLITS.map(s => `<option value="${s.key}">${s.name}</option>`).join('') +
     '<option value="finish">Finish time</option>';
-  $('tpSeed').innerHTML = '<option value="">Any seed type</option>' +
-    `<optgroup label="Overworld type">${OVERWORLD_TYPES.map(t => `<option value="ow:${t}">${prettyType(t)}</option>`).join('')}</optgroup>` +
-    `<optgroup label="Bastion type">${BASTION_TYPES.map(t => `<option value="bt:${t}">${prettyType(t)}</option>`).join('')}</optgroup>`;
+  $('tpOw').innerHTML = '<option value="">Any</option>' +
+    OVERWORLD_TYPES.map(t => `<option value="${t}">${prettyType(t)}</option>`).join('');
+  $('tpBt').innerHTML = '<option value="">Any</option>' +
+    BASTION_TYPES.map(t => `<option value="${t}">${prettyType(t)}</option>`).join('');
   $('tpSplit').addEventListener('change', e => { tp.split = e.target.value; renderTopPlayers(); });
-  $('tpSeed').addEventListener('change', e => { tp.seed = e.target.value; renderTopPlayers(); });
+  $('tpOw').addEventListener('change', e => { tp.ow = e.target.value; renderTopPlayers(); });
+  $('tpBt').addEventListener('change', e => { tp.bt = e.target.value; renderTopPlayers(); });
   renderTopPlayers();
 }
 
-// One row per listed player for the chosen split + seed type, with percentile vs. all sample runs.
+// What the ranks are compared against for the chosen split and seed types: both types when the
+// data allows, else the type that matters most for that split, else all seed types.
+function tpPopulation(i) {
+  if (!baseline) return { pop: null, used: 'all' };
+  const seed = { ow: tp.ow || null, bt: tp.bt || null };
+  const tries = [seed];
+  const own = SPLIT_SEED[tp.split];
+  if (seed.ow && seed.bt && own) tries.push({ [own]: seed[own] });
+  for (const s of tries) {
+    const p = comparePop(i, s);
+    if (p.narrowed) return { pop: p, used: s };
+  }
+  return { pop: comparePop(i), used: 'all' };
+}
+
+// One row per listed player for the chosen split + seed types, with their percentile.
 function tpRows() {
   const i = tp.split === 'finish' ? 'finish' : SPLITS.findIndex(s => s.key === tp.split);
-  const [kind, type] = tp.seed ? tp.seed.split(':') : [];
-  const pop = baseline ? comparePop(i, kind ? { [kind]: type } : {}) : null;
+  const { pop, used } = tpPopulation(i);
+  const key = seedKey({ ow: tp.ow, bt: tp.bt });
   const rows = [];
   for (const p of tp.data.players) {
-    const sc = p.scopes[tp.seed || 'all'];
+    const sc = p.scopes[key];
     if (!sc) continue;
     const avg = i === 'finish' ? sc.f : sc.m[i];
     const runs = i === 'finish' ? sc.fn : sc.n[i];
     if (avg == null || runs < TP_MIN_RUNS) continue;
     rows.push({ p, avg, runs, pct: pop ? percentile(avg, pop.values) : null });
   }
-  return { rows, narrowed: pop?.narrowed, sample: pop?.values.length ?? 0 };
+  return { rows, used, sample: pop?.values.length ?? 0 };
 }
 
 function renderTopPlayers() {
   if (!tp.data) return;
-  const { rows, narrowed, sample } = tpRows();
+  const { rows, used, sample } = tpRows();
   const splitName = tp.split === 'finish' ? 'Finish time' : SPLITS.find(s => s.key === tp.split).name;
-  const seedName = tp.seed ? prettyType(tp.seed.split(':')[1]) : '';
+  const seedName = [tp.ow && prettyType(tp.ow), tp.bt && prettyType(tp.bt)].filter(Boolean).join(' + ');
 
   // When the snapshot was taken, so newer games missing from the list don't look like a bug.
   const when = new Date(tp.data.generatedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   $('tpNote').textContent = `Season ${tp.data.season} Elo top 150 · ${tp.data.complete ? '' : `still collecting (${tp.data.players.length} of 150 so far) · `}` +
     `averages from each player's last ${tp.data.perPlayer} ranked matches, as of ${when}`;
 
-  // Tier chips with counts.
-  $('tpTiers').innerHTML = '<span class="label">Show</span>' + TP_TIERS.map(t => {
-    const count = t.key === 'all' ? rows.length : rows.filter(r => r.pct != null && r.pct <= t.max).length;
-    return `<button type="button" class="chip${tp.tier === t.key ? ' on' : ''}" data-tptier="${t.key}">` +
-      `${t.tier ? tierIcon(t.tier, 14) : ''}${t.label}<small>${count}</small></button>`;
-  }).join('');
-
-  const tier = TP_TIERS.find(t => t.key === tp.tier);
-  const shown = tier.key === 'all' ? rows : rows.filter(r => r.pct != null && r.pct <= tier.max);
   const cols = [
     { key: 'player', label: 'Player', dir: 1, get: r => r.p.rank },
     { key: 'elo', label: 'Elo', dir: -1, get: r => r.p.elo },
@@ -859,11 +859,11 @@ function renderTopPlayers() {
     { key: 'runs', label: 'Runs', dir: -1, get: r => r.runs },
     { key: 'pct', label: 'Rank', dir: 1, get: r => r.pct,
       tip: byPlayers()
-        ? `Player's average vs. the averages of ${playerAvgs.players.length} sampled players${seedName ? ` on ${seedName}` : ''}, across every rank`
-        : `Player's average vs. all ${seedName ? `${seedName} ` : ''}runs in the ${baseline?.matches.toLocaleString() ?? ''}-match sample` },
+        ? `Player's average vs. the averages of ${used === 'all' ? 'ranked players' : scopeName(used)}, sampled across every rank`
+        : `Player's average vs. ${used === 'all' ? 'runs on all seed types' : scopeName(used)} in the ${baseline?.matches.toLocaleString() ?? ''}-match sample` },
   ];
   const { col, dir } = state.sort.top;
-  const sorted = sortBy(shown, (cols.find(c => c.key === col) || cols[2]).get, dir);
+  const sorted = sortBy(rows, (cols.find(c => c.key === col) || cols[2]).get, dir);
   const me = state.user?.uuid;
 
   let html = sortHeader('top', cols) + '<tbody>';
@@ -873,7 +873,8 @@ function renderTopPlayers() {
       <td>${r.p.elo}</td><td><b>${fmt(r.avg)}</b></td><td class="n">${r.runs}</td><td>${pctBadge(r.pct)}</td></tr>`;
   });
   if (!sorted.length) {
-    html += `<tr class="tp-empty"><td colspan="5">No players ${tier.key === 'all' ? `with ${TP_MIN_RUNS}+ runs of this split${seedName ? ` on ${seedName}` : ''}` : `in ${tier.label.toLowerCase()} for this split${seedName ? ` on ${seedName}` : ''}`}.</td></tr>`;
+    html += `<tr class="tp-empty"><td colspan="5">No top-150 players have ${TP_MIN_RUNS}+ ${tp.split === 'finish' ? 'finished runs' : 'runs of this split'}` +
+      `${seedName ? ` on ${seedName}` : ''} in their last ${tp.data.perPlayer} matches.</td></tr>`;
   }
   const table = $('tpTable');
   table.innerHTML = html + '</tbody>';
@@ -884,22 +885,17 @@ function renderTopPlayers() {
     search(tr.dataset.name);
   }));
 
+  const wanted = seedName ? scopeName({ ow: tp.ow, bt: tp.bt }) : null;
   $('tpCaveat').textContent = (tp.split === 'finish'
     ? `Players are listed when they have at least ${TP_MIN_RUNS} finished runs (completions)`
     : `Players are listed when they have at least ${TP_MIN_RUNS} runs of this split`) +
-    `${seedName ? ` on ${seedName} seeds` : ''} in their last ${tp.data.perPlayer} matches, so games played since the date above aren't counted yet. Ranks compare each average with ` +
-    (byPlayers()
-      ? `the averages of ${sample.toLocaleString()} randomly sampled ranked players${narrowed ? ` on ${seedName}` : ''}, across every rank`
-      : `${narrowed ? `${sample.toLocaleString()} ${seedName} runs` : `${sample.toLocaleString()} runs on all seed types`} from the comparison sample`) +
-    `${tp.seed && !narrowed ? ` (too few for ${seedName} alone, so all seed types are used)` : ''}. Click a player to load their stats.`;
+    `${seedName ? ` on ${seedName} seeds` : ''} in their last ${tp.data.perPlayer} matches, so games played since the date above aren't counted yet. ` +
+    `Ranks compare each average with ${byPlayers() ? 'the averages of ' : ''}${sample.toLocaleString()} ` +
+    `${used === 'all' ? (byPlayers() ? 'ranked players' : 'runs on all seed types') : scopeName(used)}` +
+    `${byPlayers() ? ', sampled across every rank' : ' from the comparison sample'}` +
+    `${wanted && scopeName(used) !== wanted ? ` (not enough data for ${seedName}${tp.ow && tp.bt ? ' together' : ''}, so ${used === 'all' ? 'all seed types are' : `${scopeName(used)} are`} used)` : ''}. ` +
+    'Click a player to load their stats.';
 }
-
-document.addEventListener('click', e => {
-  const chip = e.target.closest('[data-tptier]');
-  if (!chip) return;
-  tp.tier = chip.dataset.tptier;
-  renderTopPlayers();
-});
 
 // ---------- Matches box quick picks ----------
 

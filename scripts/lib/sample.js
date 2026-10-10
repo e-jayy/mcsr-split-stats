@@ -1,6 +1,7 @@
 // Helpers shared by the data scripts.
 
 import { summarize, SPLITS } from '../../src/splits.js';
+import { seedKey } from '../../src/rank.js';
 import { get } from './http.js';
 
 // One page of a season's ranked matches, newest first (optionally before a match id).
@@ -30,12 +31,19 @@ export function scopeStats(runs) {
   };
 }
 
-// A player's averages overall ('all') and per seed type ('ow:VILLAGE', 'bt:BRIDGE', ...).
-export function playerScopes(runs) {
+// A player's averages overall ('all'), per seed type ('ow:VILLAGE', 'bt:BRIDGE', ...) and,
+// with `pairs`, per overworld + bastion pair ('ow:VILLAGE|bt:BRIDGE'). Keys come from seedKey().
+export function playerScopes(runs, { pairs = false } = {}) {
   const scopes = { all: scopeStats(runs) };
   for (const key of ['ow', 'bt']) {
     for (const type of new Set(runs.map(r => r[key]).filter(Boolean))) {
-      scopes[`${key}:${type}`] = scopeStats(runs.filter(r => r[key] === type));
+      scopes[seedKey({ [key]: type })] = scopeStats(runs.filter(r => r[key] === type));
+    }
+  }
+  if (pairs) {
+    for (const pair of new Set(runs.filter(r => r.ow && r.bt).map(r => `${r.ow} ${r.bt}`))) {
+      const [ow, bt] = pair.split(' ');
+      scopes[seedKey({ ow, bt })] = scopeStats(runs.filter(r => r.ow === ow && r.bt === bt));
     }
   }
   return scopes;

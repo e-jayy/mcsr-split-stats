@@ -39,17 +39,23 @@ export function population(baseline, i, { ow, bt } = {}) {
   return narrowed.length >= MIN_SAMPLE ? { values: narrowed, narrowed: true } : { values: all, narrowed: false };
 }
 
+// Key of a player's averages for a seed filter: 'all', 'ow:VILLAGE', 'bt:BRIDGE' or
+// 'ow:VILLAGE|bt:BRIDGE'. Shared by the data scripts and the site.
+export function seedKey({ ow, bt } = {}) {
+  return [ow && `ow:${ow}`, bt && `bt:${bt}`].filter(Boolean).join('|') || 'all';
+}
+
 // Same idea, but the population is other players' *averages* (data/player-avgs-*.json):
-// one value per sampled player with at least `minRuns` runs of the split on that seed type.
-// Players' averages are stored per single seed type, so an overworld + bastion pair isn't
-// narrowed here (callers fall back to one type).
-export function playerPopulation(data, i, { ow, bt } = {}, minRuns = 3) {
+// one value per sampled player with at least `minRuns` runs of the split on that seed type
+// (or overworld + bastion pair, when the data has pair averages).
+export function playerPopulation(data, i, seed = {}, minRuns = 3) {
   const pick = key => data.players.map(p => p.scopes[key]).filter(Boolean)
     .map(sc => (i === 'finish' ? (sc.fn >= minRuns ? sc.f : null) : (sc.n[i] >= minRuns ? sc.m[i] : null)))
     .filter(v => v != null);
   const all = pick('all');
-  if (!ow === !bt) return { values: all, narrowed: false };      // no type, or both types
-  const narrowed = pick(ow ? `ow:${ow}` : `bt:${bt}`);
+  const key = seedKey(seed);
+  if (key === 'all') return { values: all, narrowed: false };
+  const narrowed = pick(key);
   return narrowed.length >= MIN_SAMPLE ? { values: narrowed, narrowed: true } : { values: all, narrowed: false };
 }
 

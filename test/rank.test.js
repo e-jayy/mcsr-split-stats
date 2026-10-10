@@ -52,3 +52,18 @@ test('playerPopulation uses one average per player with enough runs', async () =
   assert.equal(playerPopulation(data, 0, { bt: 'HOUSING' }).narrowed, false);
   assert.equal(playerPopulation(data, 0, { ow: 'VILLAGE', bt: 'HOUSING' }).narrowed, false);
 });
+
+test('seedKey names single types and overworld + bastion pairs', async () => {
+  const { seedKey, playerPopulation } = await import('../src/rank.js');
+  assert.equal(seedKey(), 'all');
+  assert.equal(seedKey({ ow: 'VILLAGE' }), 'ow:VILLAGE');
+  assert.equal(seedKey({ bt: 'BRIDGE' }), 'bt:BRIDGE');
+  assert.equal(seedKey({ ow: 'VILLAGE', bt: 'BRIDGE' }), 'ow:VILLAGE|bt:BRIDGE');
+  assert.equal(seedKey({ ow: null, bt: '' }), 'all');
+  // a pair narrows once enough players have pair averages
+  const sc = v => ({ m: [v], n: [3], f: null, fn: 0 });
+  const players = Array.from({ length: 30 }, (_, i) => ({ scopes: { all: sc(100 + i), 'ow:VILLAGE|bt:BRIDGE': sc(500 + i) } }));
+  const p = playerPopulation({ players }, 0, { ow: 'VILLAGE', bt: 'BRIDGE' });
+  assert.ok(p.narrowed);
+  assert.equal(Math.min(...p.values), 500);
+});

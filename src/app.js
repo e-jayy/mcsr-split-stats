@@ -454,16 +454,21 @@ function renderPerformance(sum, ranks) {
   }).join('');
 
   const fin = ranks.finish;
-  // Title icons show the player's overall tier: their Finish rank, or, without any finished
-  // runs, the average of their split ranks.
+  // Performance average: the mean of the player's rank (percentile) across the seven splits,
+  // as currently ranked (so it follows the seed-type filters and the Compare-to switch).
+  // Finish time isn't included. The title icons show its tier.
   const splitPcts = SPLITS.map(s => ranks[s.key]?.pct).filter(p => p != null);
-  const overall = fin ? fin.tier
-    : splitPcts.length ? tierFor(splitPcts.reduce((a, b) => a + b, 0) / splitPcts.length) : null;
-  const titleIcon = tierIcon(overall ? overall.key : 'unrated', 32);
+  const avgPct = splitPcts.length ? splitPcts.reduce((a, b) => a + b, 0) / splitPcts.length : null;
+  const avgTier = avgPct == null ? null : tierFor(avgPct);
+  const titleIcon = tierIcon(avgTier ? avgTier.key : 'unrated', 32);
+  const avgTip = `The average of this player's rank across ${splitPcts.length === SPLITS.length ? 'all seven' : `the ${splitPcts.length} ranked`} splits ` +
+    '(Overworld to End), using the current seed-type filters and comparison. Finish time is not included.';
   card.innerHTML = `
-    <h2 class="perf-title" title="${overall ? `Overall: ${overall.name}` : 'No ranked splits yet'}">${titleIcon}<span>Split Performance</span>${titleIcon}</h2>
+    <h2 class="perf-title" title="${avgTier ? `Performance average: ${avgTier.name}` : 'No ranked splits yet'}">${titleIcon}<span>Split Performance</span>${titleIcon}</h2>
     <div class="filter-line center" data-filters></div>
     ${compareSwitch(ranks)}
+    ${avgTier ? `<p class="perf-avg" title="${esc(avgTip)}" tabindex="0">Performance average
+      <span style="color:${avgTier.color}">${tierIcon(avgTier.key, 16)}<b>${rankLabel(avgPct)}</b> · ${avgTier.name}</span><span class="info-dot" aria-hidden="true">i</span></p>` : ''}
     ${fin ? `<p class="perf-overall">Finish <b>${fmt(val(sum.finish), { tenths: false })}</b> <span style="color:${fin.tier.color}">${tierIcon(fin.tier.key, 14)}${fin.label} · ${fin.tier.name}</span></p>` : ''}
     <div class="radar">
       <svg viewBox="0 0 ${W} ${H}" aria-hidden="true">

@@ -273,6 +273,17 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .perf-title { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 32px; line-height: 1; }
 .perf-overall { text-align: center; margin: 12px 0 0; color: var(--muted); }
 .perf-overall b { color: #fff; }
+/* Performance average (with an "i" tooltip explaining it). */
+.perf-avg { text-align: center; margin: 12px 0 0; font-size: 24px; color: var(--zinc-200); cursor: help; }
+.perf-avg b { font-weight: 400; }
+.perf-avg .px-icon { vertical-align: -2px; margin: 0 6px 0 10px; }
+.perf-avg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+@media (max-width: 640px) { .perf-avg { font-size: 16px; } .perf-avg .px-icon { margin-left: 6px; } }
+.info-dot {
+  display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 4px;
+  border: 1px solid currentColor; border-radius: 50%; color: var(--muted); text-shadow: none;
+  font: 600 10px/1 system-ui, sans-serif; vertical-align: top; transform: translateY(2px);
+}
 .px-icon { display: inline-block; vertical-align: -3px; margin-right: 6px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.45)); }
 .perf-title .px-icon { margin: 0; vertical-align: middle; }
 .radar { position: relative; max-width: 720px; margin: 8px auto 0; aspect-ratio: 160 / 100; }
